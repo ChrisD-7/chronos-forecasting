@@ -38,12 +38,26 @@ MUTANTS = [
     ("core/oi_maint.c", "m->pages_since_wipe = 0; m->state = M_WIPING;", "m->state = M_WIPING;"),
     ("core/oi_maint.c", "return A_BUSY;", "return A_NONE;"),
     ("core/oi_maint.c", "if (m->state == M_FAULT) { m->state = M_CAPPED;", "if (m->state == M_FAULT) { m->state = M_READY;"),
+    ("core/oi_app.c", "if (vmax > vlim) vmax = vlim;", "(void)vlim;"),
+    ("core/oi_app.c", " || (int64_t)t.accel_counts > run_lead", " || run_lead < 0"),
+    ("core/oi_app.c", "(int64_t)t.accel_counts > run_tail", "(int64_t)t.accel_counts >= run_tail"),
+    ("core/oi_app.c", "if (a->sched.missed) send_error(a, OI_DEVERR_MISSED);", ""),
+    ("core/oi_app.c", "a->paper_steps += steps;", ""),
+    ("core/oi_app.c", "if (pos0 != x0 && move_until", "if (0 && move_until"),
+    ("core/oi_app.c", "if (dir > 0 ? pos > last : pos < last) { stalled = 0; last = pos; }", "if (pos != last) { stalled = 0; last = pos; }"),
+    ("core/oi_app.c", "a->page_idle_ms = 0;\n    oi_job_feed", "oi_job_feed"),
+    ("core/oi_app.c", "a->page_idle_ms >= a->cfg.page_timeout_ms", "a->page_idle_ms > a->cfg.page_timeout_ms"),
+    ("core/oi_app.c", "if (right64 > INT32_MAX || right64 < INT32_MIN || left64 > right64)", "if (0)"),
+    ("core/oi_app.c", "oi_maint_clear_fault(&a->maint); a->page_active = 0;", "a->page_active = 0;"),
+    ("core/oi_app.c", "if (a->page_active && a->cfg.page_timeout_ms) {", "if (0) {"),
+    ("core/oi_app.c", "if (oi_sched_start(&a->sched, dir) != OI_OK) { send_error(a, OI_DEVERR_CONFIG); return; }", "oi_sched_start(&a->sched, dir);"),
 ]
 CF = "-std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -fsanitize=address,undefined".split()
 BUILDS = [
     ("test_sched", ["tests/test_sched.c", "core/oi_sched.c"], []),
     ("test_proto", ["tests/test_proto.c", "core/oi_proto.c"], ["VECTORS"]),
     ("test_modules", ["tests/test_modules.c", "core/oi_head_matrix.c", "core/oi_motion.c", "core/oi_maint.c", "core/oi_job.c", "core/oi_proto.c"], []),
+    ("test_app", ["tests/test_app.c", "core/oi_app.c", "core/oi_job.c", "core/oi_proto.c", "core/oi_sched.c", "core/oi_motion.c", "core/oi_maint.c"], []),
     ("fuzz_job", ["tests/fuzz_job.c", "core/oi_job.c", "core/oi_proto.c"], ["200000"]),
 ]
 
@@ -55,8 +69,11 @@ def run_tests(d, vectors):
         if b.returncode:
             return "build"
         a = [vectors if x == "VECTORS" else x for x in args]
-        if subprocess.run([exe] + a, cwd=d, capture_output=True, timeout=300).returncode:
-            return "killed"
+        try:
+            if subprocess.run([exe] + a, cwd=d, capture_output=True, timeout=20).returncode:
+                return "killed"
+        except subprocess.TimeoutExpired:
+            return "killed"                       # a hang (e.g. missing stall watchdog) counts as detected
     return "survived"
 
 

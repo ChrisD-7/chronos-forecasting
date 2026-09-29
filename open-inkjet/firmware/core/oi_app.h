@@ -36,7 +36,13 @@ typedef struct {
     uint32_t max_fire_hz;
     uint32_t steps_per_mm_x1000;
     uint32_t idle_cap_ms, wipe_every_pages, spit_droplets;
+    uint32_t stall_ticks;         /* carriage watchdog: wait_encoder_change calls without progress before aborting (> 0) */
+    uint32_t page_timeout_ms;     /* no bytes for this long mid-page: end the page so the head can be capped (0 = never) */
 } oi_app_cfg_t;
+
+/* Device error codes, sent to the host as an unsolicited T_ERROR (8) frame: payload = code u16 LE, swath idx u16 LE.
+ * The host sender raises LinkError on it. */
+enum { OI_DEVERR_FAULT = 1, OI_DEVERR_RAMP = 2, OI_DEVERR_CONFIG = 3, OI_DEVERR_MISSED = 4, OI_DEVERR_STALL = 5, OI_DEVERR_RANGE = 6 };
 
 typedef struct {
     oi_hal_t hal; oi_app_cfg_t cfg;
@@ -44,7 +50,8 @@ typedef struct {
     oi_job_t job; oi_maint_t maint; oi_feed_t feed; oi_sched_t sched;
     uint64_t paper_steps;
     int page_active;
-    uint32_t passes, pass_errors, faults;
+    uint32_t page_idle_ms;
+    uint32_t passes, pass_errors, faults, last_error;
 } oi_app_t;
 
 /* Returns 0 on success, -1 on invalid config. buf/cap: swath buffer. */

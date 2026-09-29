@@ -12,6 +12,13 @@ class LinkError(RuntimeError):
     pass
 
 
+class DeviceError(LinkError):
+    """The printer reported that a pass did not print correctly (T_ERROR frame)."""
+    def __init__(self, code, swath):
+        super().__init__("printer error code %d on swath %d" % (code, swath))
+        self.code, self.swath = code, swath
+
+
 class LinkClosed(LinkError):
     """The device went away (EOF / I/O error), as opposed to a timeout."""
 
@@ -27,6 +34,8 @@ def _reply_for(frame_crc: int, read_frame):
         if r is None:
             return None
         ftype, payload = r
+        if ftype == p.T_ERROR and len(payload) == 4:                # unsolicited: abort the job, do not keep sending
+            raise DeviceError(*struct.unpack("<HH", payload))
         if len(payload) == 2 and struct.unpack("<H", payload)[0] == frame_crc:
             return ftype
     return None

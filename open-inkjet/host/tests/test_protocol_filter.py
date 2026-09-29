@@ -120,6 +120,15 @@ def test_sender_ignores_stale_ack_for_previous_frame():
     assert sent == [f1, f1, f2, f2]
 
 
+def test_sender_raises_device_error_frame():
+    from openinkjet.sender import send_frames, DeviceError, LinkError
+    f1 = p.encode(p.T_START_PASS, b"\x03\x00")
+    err = (p.T_ERROR, struct.pack("<HH", 4, 3))                 # code 4 (missed columns) on swath 3
+    with pytest.raises(DeviceError) as e:
+        send_frames([f1], lambda b: None, iter([err, _ack(f1)]).__next__)
+    assert e.value.code == 4 and e.value.swath == 3 and isinstance(e.value, LinkError)
+
+
 def test_start_pass_carries_swath_index():
     frames = list(p.swath_frames(7, b"\x00" * 38, 1, 38, 1, 12700))
     t, pl, _ = p.decode(frames[-1])

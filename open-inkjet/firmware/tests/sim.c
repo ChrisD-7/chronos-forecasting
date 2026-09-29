@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
         .counts_per_dot = COUNTS_PER_DOT, .origin_counts = NOMINAL_ORIGIN - lag, .bidir_offset_counts = bidir,
         .left_stop_counts = 0, .margin_counts = MARGIN, .v_max = oi_max_cruise_for_head(18000, COUNTS_PER_DOT) / 4,
         .accel = 300000, .max_fire_hz = 18000, .steps_per_mm_x1000 = 157480,    /* deliberately fractional */
-        .idle_cap_ms = 2000, .wipe_every_pages = 1, .spit_droplets = 5 };
+        .idle_cap_ms = 2000, .wipe_every_pages = 1, .spit_droplets = 5, .stall_ticks = 1000, .page_timeout_ms = 10000 };
     if (oi_app_init(&app, &hal, &cfg, &mhead.head, swath_buf, sizeof swath_buf)) return 3;
     struct pollfd pf = { 0, POLLIN, 0 };
     for (;;) {

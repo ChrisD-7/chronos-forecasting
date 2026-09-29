@@ -9,6 +9,7 @@ T_SWATH_HDR = 1   # payload: swath_idx u16, columns u32, bytes_per_col u16, dir 
 T_SWATH_DATA = 2  # payload: offset u32, raw bytes (chunk of packed columns)
 T_START_PASS = 3  # payload: swath_idx u16 (receiver must ignore a repeated idx: retransmit safe)
 T_PAGE_END = 7   # payload: empty; sent after the last swath of a page (wipe accounting, eject)
+T_ERROR = 8      # device -> host, unsolicited: payload code u16, swath idx u16 (codes: firmware/core/oi_app.h OI_DEVERR_*)
 T_ACK, T_NAK, T_BUSY = 4, 5, 6   # payload: crc16 u16 LE of the frame being answered; BUSY = printer is printing, retry later
 MAX_PAYLOAD = 1024
 

@@ -4,11 +4,15 @@
 - **Device application core (`firmware/core/oi_app.c`)**, run inside the simulator through a simulated HAL: uncap once per page, spit before printing, wipe after
   the page (`wipe_every_pages`), never fire while capped (`capped_fire=0`), carriage speed clamped to the head fire-rate limit, head re-capped after the idle
   timeout, and two pages in one job (swath indices restart at 0 and print again).
-- **Host, 44 pytest tests:** geometry, slicer nozzle mapping (vdpi 600..50), protocol/CRC, sender (retransmit, BUSY wait, stale ACK, bounded drain),
+- **Application-core unit tests (`firmware/tests/test_app.c`, scripted fake HAL):** action order over two pages, BUSY answered from an emulated ISR
+  mid-pass, ramp must fit BOTH run-in distances (lead and tail, including the exact boundary), missed columns and stalled/backwards encoder reported to the
+  host (`T_ERROR`) instead of silently dropped, positioning move before a pass when column counts differ, aborted job capped after `page_timeout_ms`,
+  speed clamp, paper-step accounting, config/int32-range errors, FAULT recovery.
+- **Host, 45 pytest tests:** geometry, slicer nozzle mapping (vdpi 600..50), protocol/CRC, sender (retransmit, BUSY wait, stale ACK, bounded drain),
   serial link (EOF, write timeout, resync speed), filter (aspect, margins, alpha, 16-bit, non-square dpi), CUPS filter/backend logic and exit codes,
   PPD structure and mime types, and end-to-end tests.
 - **Firmware, C99 with -Wall -Wextra -Werror and ASan+UBSan:** scheduler, parser, job controller, matrix head, motion, feed, maintenance FSM (unit tests);
-  a coherent-sequence fuzzer (300k iterations, thousands of complete passes); 32 single-line mutants of the firmware, all killed (`tools_mutate.py`).
+  a coherent-sequence fuzzer (300k iterations, thousands of complete passes); 45 single-line mutants of the firmware (including the application core), all killed and none invalid (`tools_mutate.py`).
 - **Full-pipeline simulator (`firmware/tests/sim.c`):** host filter -> frames -> the REAL C parser/job/scheduler/matrix driver -> simulated
   carriage, paper feed (fractional steps) and head -> printed page bitmap equals the input bitmap exactly, over a clean link, over a link
   with injected CRC errors and truncated frames, and through a pty via the real backend code.
@@ -30,6 +34,12 @@
   feed truncation/zero steps-per-mm, maintenance FAULT latch (now BUSY + `oi_maint_clear_fault`), CAD hole coordinates (chained workplane bug,
   vacuous assembly check), CUPS exit codes (retry is 6, not 1), DEVICE_URI traversal/symlink/non-tty handling, invalid PPD mime type, unbounded
   stale-reply loop, link EOF/write timeout/quadratic resync, unreachable entry points, stale docs.
+
+- Round 3 (application core, reproduced by an independent scripted-HAL driver): passes dropped silently after START was ACKed (now a `T_ERROR` frame, host raises
+  `DeviceError`); run-in margin checked against the wrong distance; carriage started a pass wherever the last one ended (columns lost; now a positioning move and
+  a missed-column check); no watchdog on the carriage loop (`stall_ticks`); head never capped after an aborted job (`page_timeout_ms`); int32 overflow in
+  column position math; FAULT was unrecoverable (`oi_maint_clear_fault`). Whole-project audit: README status reworded, SPDX headers + `REUSE.toml` +
+  `NOTICE.md` + `docs/PROVENANCE.md` added.
 
 ## Sourced but NOT verified (search snippets; primary pages blocked in the sandbox)
 - HP45: 300 nozzles/600 npi, 12.7 mm swath, 12 V, 52 contacts, 18 kHz max, 300 dpi recommended: confirmed by independent search summaries (ytec3d.com blocked).

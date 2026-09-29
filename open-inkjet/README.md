@@ -23,4 +23,4 @@ Repository root (chronos-forecasting) is Apache-2.0 and unrelated; this folder i
 ## Run everything
     pip install numpy pillow pytest cadquery      # gcc required for the firmware and end-to-end tests
     ./run_tests.sh                                # host + firmware (ASan/UBSan) + fuzz + simulator + CAD
-    ./run_tests.sh --mutate                       # additionally: 32 firmware mutants must all be killed
+    ./run_tests.sh --mutate                       # additionally: 45 firmware mutants must all be killed
