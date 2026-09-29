@@ -8,11 +8,12 @@ from PIL import Image
 from openinkjet.filter import frames_for_image
 open('/tmp/oi_vectors.bin','wb').write(b''.join(frames_for_image(Image.new('L',(64,64),100))))" )
 ( cd firmware
-  for t in sched proto; do
-    src="core/oi_$t.c"; [ $t = sched ] && extra="" || extra=""
-    gcc -std=c99 -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/oi_test_$t tests/test_$t.c $src
-  done
+  CF="-std=c99 -Wall -Wextra -Werror -fsanitize=address,undefined"
+  gcc $CF -o /tmp/oi_test_sched tests/test_sched.c core/oi_sched.c
+  gcc $CF -o /tmp/oi_test_proto tests/test_proto.c core/oi_proto.c
+  gcc $CF -o /tmp/oi_test_modules tests/test_modules.c core/oi_head_matrix.c core/oi_motion.c core/oi_maint.c core/oi_job.c core/oi_proto.c
   /tmp/oi_test_sched
-  /tmp/oi_test_proto /tmp/oi_vectors.bin )
-( cd cad && python3 carriage_plate.py && rm -f carriage_plate.stl )
+  /tmp/oi_test_proto /tmp/oi_vectors.bin
+  /tmp/oi_test_modules )
+( cd cad && python3 -m pytest -q test_cad.py && python3 assembly.py )
 echo ALL TESTS PASSED

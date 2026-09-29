@@ -8,3 +8,17 @@ MGN9H = dict(width=20.0, length=40.0, bolt_x=15.0, bolt_y=16.0, bolt_d=3.0)  # S
 
 PLATE_T = 4.0             # GUESS: adapter plate thickness
 PLATE_MARGIN = 6.0        # GUESS
+
+# ---- frame / paper path (all GUESS until the physical parts are measured; assembly.py checks consistency) ----
+RAIL_LEN = 300.0          # stock MGN9 length we plan to buy (SOURCED: vendors list 300/350/400 mm)
+RAIL_HOLE_PITCH = 20.0    # GUESS (commonly 20 mm for MGN9; verify on the real rail)
+RAIL_HOLE_D = 3.5         # GUESS
+PAGE_W = 210.0            # A4 width (carriage axis)
+PAGE_MARGIN = 4.0
+CARRIAGE_BODY_W = 40.0    # carriage + cartridge holder footprint along the rail (GUESS)
+PARK_ZONE = 30.0          # capping/wipe zone beyond the page
+SIDE_PLATE = dict(w=180.0, h=150.0, t=8.0)          # GUESS
+# HP45 cartridge outline: NOT KNOWN, placeholder box to be replaced by a caliper measurement
+HP45_BOX = dict(w=20.0, l=45.0, h=45.0)             # GUESS -- MEASURE
+ROLLER_D = 20.0           # GUESS feed roller diameter
+BEARING_608 = dict(od=22.0, id=8.0, w=7.0)          # 608 bearing, standard dimensions
