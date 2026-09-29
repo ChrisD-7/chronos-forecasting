@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: CERN-OHL-S-2.0
 """Carriage adapter plate: bolts to an MGN9H block; has a 2-hole pattern for the cartridge holder
 (pattern is a placeholder until the HP45 cartridge is measured)."""
 import cadquery as cq

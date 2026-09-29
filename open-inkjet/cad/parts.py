@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: CERN-OHL-S-2.0
 """Printable frame parts (CadQuery). Every dimension comes from params.py; see the VERIFIED/GUESS tags there.
 Holes are cut with explicit absolute coordinates (no chained workplane offsets)."""
 import cadquery as cq

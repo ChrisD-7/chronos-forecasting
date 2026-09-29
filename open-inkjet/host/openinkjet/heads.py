@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """Printhead descriptors. Values are from public sources and MUST be confirmed on the bench
 (see docs/VERIFICATION.md). Source for HP45: https://ytec3d.com/hp45-inkjet-printhead/"""
 from dataclasses import dataclass

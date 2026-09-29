@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 #include "oi_head_matrix.h"
 #include <string.h>
 

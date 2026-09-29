@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Printer simulator (POSIX test harness, not device code).
  * Reads protocol frames on stdin, writes ACK/NAK/BUSY frames on stdout, and at EOF writes the printed page as a
  * PBM (P4) to argv[1]. Runs the REAL oi_app (job controller, maintenance FSM, motion planner, fire scheduler,

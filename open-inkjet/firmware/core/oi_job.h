@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Job controller: consumes protocol frames, assembles a swath, ACK/NAKs, and reports pass-ready.
  * Replies echo the CRC of the frame answered (see host/openinkjet/sender.py). */
 #ifndef OI_JOB_H

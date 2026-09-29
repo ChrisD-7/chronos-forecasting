@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """Page/carriage/encoder arithmetic for an A4, single-rail, sheet-fed printer."""
 import math
 from .heads import HeadSpec, MM_PER_INCH

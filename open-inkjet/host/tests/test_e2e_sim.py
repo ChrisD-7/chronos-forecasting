@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """End-to-end: host filter -> frames -> REAL C firmware core in a simulated printer -> printed page == input bitmap."""
 import os, select, struct, subprocess, tempfile
 import numpy as np

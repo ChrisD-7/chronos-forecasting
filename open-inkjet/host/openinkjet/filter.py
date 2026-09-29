@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """CLI filter: image (stdin or file) -> A4 bitmap at hdpi x vdpi -> halftone -> swath frames on stdout.
 NOTE: this module is the pipeline core. cups.py wraps it as a CUPS filter/backend for direct PNG/PBM jobs (untested on a real CUPS); there is no PDF/cups-raster route yet."""
 import argparse, sys

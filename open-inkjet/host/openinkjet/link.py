@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """Byte-stream link (serial tty, pipe, socket fd) with frame-level reads that time out."""
 import os, select, stat
 from . import protocol as p

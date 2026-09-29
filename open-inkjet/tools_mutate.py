@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """Mutation check: apply each single-line mutation to a scratch copy of firmware/ and require the firmware tests to FAIL.
 Usage: python3 tools_mutate.py   (exit 1 if any mutant survives). Mutants are (file, old, new) exact-substring replacements."""
 import os, shutil, subprocess, sys, tempfile

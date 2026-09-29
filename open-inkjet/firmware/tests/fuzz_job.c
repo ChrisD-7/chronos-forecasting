@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Fuzz the protocol parser + job controller with random and mutated frames under ASan/UBSan.
  * Invariants: no OOB, received <= total <= cap, pass_ready only for a complete swath of the matching idx. */
 #include <stdio.h>

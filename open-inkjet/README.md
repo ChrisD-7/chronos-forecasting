@@ -4,7 +4,7 @@ Open, 3D-printable, A4 sheet-fed inkjet printer. Linear-rail carriage, HP 45 (51
 printhead-abstracted firmware (`oi_head_t`, plus an address/primitive matrix driver) so other heads can be added.
 Clean-room design: nothing is copied from Open Printer (Open Tools), which is CC BY-NC-SA 4.0.
 
-**Status: complete in software and simulation; no hardware has been built or measured.** Read `docs/VERIFICATION.md`
+**Status: a well-tested software model of the printer plus a placeholder CAD kit. It is NOT yet a working printer:** no electronics (schematic, head driver), no MCU board glue, no measured parts, nothing printed. Read `docs/VERIFICATION.md`
 for exactly what is tested, simulated, sourced-but-unverified, and untested, and `docs/BENCH.md` for the procedures
 that turn placeholders into measurements. `docs/PLAN.md` holds the original plan and sources.
 
@@ -17,7 +17,7 @@ that turn placeholders into measurements. `docs/PLAN.md` holds the original plan
 | `host/bin`, `host/cups`, `host/install_cups.sh` | CUPS executables, PPD, installer (untested on real CUPS) | GPL-3.0-only |
 | `docs/` | plan, verification log, bench procedures, measurements template | CC-BY-4.0 |
 
-Repository root (chronos-forecasting) is Apache-2.0 and unrelated; this folder carries its own licenses in `licenses/`.
+Repository root (chronos-forecasting) is Apache-2.0 and unrelated; this folder is licensed independently, see `NOTICE.md`, `REUSE.toml` and `licenses/` (SPDX headers are in every source file). Provenance: `docs/PROVENANCE.md`.
 "HP" is a trademark of HP Inc.; this project is "compatible with HP 45", not affiliated.
 
 ## Run everything

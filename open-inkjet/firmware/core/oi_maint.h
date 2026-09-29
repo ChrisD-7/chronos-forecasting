@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Maintenance state machine: cap when idle, uncap before printing, spit, wipe.
  * Steps are emitted as actions for the motion layer; it does no I/O itself. */
 #ifndef OI_MAINT_H

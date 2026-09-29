@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """CUPS entry points. UNTESTED against a real CUPS install (none in the build sandbox); exit codes checked
 against OpenPrinting/cups backend.h; argument conventions follow the CUPS filter/backend contract:
 argv = job user title copies options [file].

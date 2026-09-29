@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 # Installs the filter, backend and PPD into a CUPS tree. UNTESTED on a real CUPS system (none in the build sandbox).
 # CUPS runs backends as root; review bin/ before installing. Usage: sudo ./install_cups.sh [/usr/lib/cups] [/usr/share/cups/model]
 set -euo pipefail

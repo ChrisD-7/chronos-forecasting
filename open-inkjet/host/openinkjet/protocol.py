@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """Host<->MCU framing. Frame: 0xA5 | type u8 | len u16 LE | payload | crc16 u16 LE.
 CRC16-CCITT-FALSE (poly 0x1021, init 0xFFFF) over type|len|payload. Spec mirrored in firmware/core/oi_proto.c."""
 import struct

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """Slice a 1-bit page bitmap into per-swath column data for a nozzle-array head.
 
 Output for each swath is an array (columns, nozzles) of uint8 {0,1}: for carriage column x, nozzle n

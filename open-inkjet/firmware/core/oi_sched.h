@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Encoder-synchronised fire scheduler (position based, not time based). */
 #ifndef OI_SCHED_H
 #define OI_SCHED_H

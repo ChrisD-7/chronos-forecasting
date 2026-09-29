@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 #include "oi_motion.h"
 
 int oi_traj_plan(oi_traj_t *t, uint32_t dist, uint32_t v_max, uint32_t a) {

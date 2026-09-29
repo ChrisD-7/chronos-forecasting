@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 #ifndef OI_PROTO_H
 #define OI_PROTO_H
 #include <stdint.h>

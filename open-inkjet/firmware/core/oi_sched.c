@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 #include "oi_sched.h"
 
 /* All position arithmetic is int64 so origin/col/offset extremes cannot overflow (signed overflow is UB). */

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: CERN-OHL-S-2.0
 """Shared CAD parameters. Every value is tagged VERIFIED (measured/datasheet read by us),
 SOURCED (from a public page we could only see as a search snippet) or GUESS (to be measured)."""
 BED_MM = 220.0            # printable bed limit we design to (Ender-3 class)

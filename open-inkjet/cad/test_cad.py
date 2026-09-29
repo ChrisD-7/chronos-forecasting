@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: CERN-OHL-S-2.0
 import math
 import cadquery as cq
 import pytest

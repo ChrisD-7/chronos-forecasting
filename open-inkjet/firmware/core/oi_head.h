@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Printhead abstraction: the scheduler never touches HP45-specific pins. */
 #ifndef OI_HEAD_H
 #define OI_HEAD_H

@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Device application core: wires job controller -> maintenance FSM -> motion planner -> fire scheduler -> head.
  * Board-independent: everything hardware-specific goes through oi_hal_t (implemented per board, and by
  * firmware/tests/sim.c for the simulator).

@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Integer trapezoid planning for the carriage and paper feed (no FPU needed). */
 #ifndef OI_MOTION_H
 #define OI_MOTION_H

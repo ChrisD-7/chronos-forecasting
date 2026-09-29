@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 import io, os, struct, sys, subprocess, tempfile, pytest
 from PIL import Image
 from openinkjet import cups, protocol as p

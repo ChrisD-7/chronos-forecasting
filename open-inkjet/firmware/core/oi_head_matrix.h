@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 open-inkjet contributors
+ * SPDX-License-Identifier: GPL-3.0-only */
 /* Address/primitive matrix printhead backend (HP45-style thermal head).
  * Public source (patent snippet via search): 22 address lines x 14 primitives, 300 resistors used.
  * The nozzle -> (address, primitive) map is NOT in this repo as fact: it is a table you fill from bench

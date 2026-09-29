@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 open-inkjet contributors
+# SPDX-License-Identifier: GPL-3.0-only
 """Stop-and-wait sender. A reply only counts if it echoes the CRC of the frame just sent, so a late ACK
 for an earlier (retransmitted) frame is ignored instead of acknowledging the wrong frame.
 BUSY (printer is printing the previous swath) waits and resends WITHOUT using the retry budget, but only until

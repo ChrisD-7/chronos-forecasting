@@ -1,0 +1,22 @@
+version = 1
+SPDX-PackageName = "open-inkjet"
+SPDX-PackageSupplier = "open-inkjet contributors"
+
+# Files that cannot carry a header. Code files carry SPDX headers themselves.
+[[annotations]]
+path = ["docs/**", "README.md", "LICENSES.md", "NOTICE.md", "bom/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 open-inkjet contributors"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+[[annotations]]
+path = ["host/cups/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 open-inkjet contributors"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+[[annotations]]
+path = ["licenses/**", "REUSE.toml", ".gitignore"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "CC0-1.0"
