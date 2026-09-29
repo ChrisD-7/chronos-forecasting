@@ -35,3 +35,18 @@ MOTOR_FULL_STEPS = 200; MICROSTEPS = 16
 HP45_BOX = dict(w=20.0, l=45.0, h=45.0)             # GUESS -- MEASURE
 ROLLER_D = 20.0           # GUESS feed roller diameter
 BEARING_608 = dict(od=22.0, id=8.0, w=7.0)          # 608 bearing, standard dimensions
+
+# ---- paper path and carriage stack (added with the assembly model; GUESS unless tagged) ----
+EXT_SIZE = 20.0            # 2020 extrusion (nominal 20 x 20 mm, standard)
+MGN_H_TOTAL = 10.0         # GUESS: MGN9H rail bottom to block top (vendor listings say ~10 mm; measure)
+NOZZLE_GAP = 1.5           # GUESS: printhead to paper distance
+SHELF_T = 4.0
+RISER_T = 4.0
+SHELF_LEN = 55.0           # shelf depth beyond the top plate; must hold the 51 mm holder footprint
+PLATEN_HALF = dict(l=110.0, w=55.0, t=6.0)     # two halves make 220 mm (A4 is 210); each fits the 220 mm bed
+PLATEN_LIP = 2.0           # paper-guide lip height
+# NEMA 17 flange (SOURCED via search: 42.3 mm face, 31 mm hole spacing, 22 mm pilot, M3 holes: MOONS', RepRap wiki, jlcmc)
+NEMA17 = dict(face=42.3, hole_pitch=31.0, pilot=22.0, hole_d=3.4)
+MOTOR_PLATE_T = 6.0
+SENSOR_HOLE_PITCH = 20.0   # GUESS: optical end-stop / paper sensor board
+ENCODER_HOLE_PITCH = 12.0  # GUESS: encoder reader

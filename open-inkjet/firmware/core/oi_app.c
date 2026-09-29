@@ -109,15 +109,31 @@ static void end_page(oi_app_t *a) {
     if (oi_maint_page_done(&a->maint) == A_WIPE) { a->hal.maint(a->hal.ctx, A_WIPE); oi_maint_step(&a->maint); }
 }
 
-void oi_app_rx(oi_app_t *a, uint8_t byte) {
+void oi_app_feed(oi_app_t *a, uint8_t byte) {
     a->page_idle_ms = 0;
-    oi_job_feed(&a->job, byte, hal_reply, a);
-    if (oi_job_take_pass(&a->job)) { run_pass(a); oi_job_pass_done(&a->job); }
-    if (oi_job_take_page_end(&a->job) && a->page_active) end_page(a);
+    oi_job_feed(&a->job, byte, hal_reply, a);                /* ACK/NAK/BUSY leave immediately; no pass runs here */
 }
 
+int oi_app_service(oi_app_t *a) {
+    int did = 0;
+    if (oi_job_take_pass(&a->job)) { run_pass(a); oi_job_pass_done(&a->job); did = 1; }
+    if (oi_job_take_page_end(&a->job) && a->page_active) { end_page(a); did = 1; }
+    return did;
+}
+
+void oi_app_rx(oi_app_t *a, uint8_t byte) {
+    oi_app_feed(a, byte);
+    oi_app_service(a);
+}
+
+void oi_app_idle_rx(oi_app_t *a) { oi_parser_reset(&a->job.parser); }
+
 void oi_app_idle(oi_app_t *a, uint32_t dt_ms) {
-    oi_parser_reset(&a->job.parser);
+    oi_app_idle_rx(a);
+    oi_app_idle_machine(a, dt_ms);
+}
+
+void oi_app_idle_machine(oi_app_t *a, uint32_t dt_ms) {
     if (a->page_active && a->cfg.page_timeout_ms) {                  /* aborted job: no PAGE_END will ever come */
         a->page_idle_ms += dt_ms;
         if (a->page_idle_ms >= a->cfg.page_timeout_ms) { a->page_idle_ms = 0; end_page(a); }

@@ -10,7 +10,7 @@ SPDX-FileCopyrightText = "2026 open-inkjet contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
 
 [[annotations]]
-path = ["host/cups/**"]
+path = ["host/cups/**", "firmware/board/rp2040/CMakeLists.txt"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 open-inkjet contributors"
 SPDX-License-Identifier = "GPL-3.0-only"

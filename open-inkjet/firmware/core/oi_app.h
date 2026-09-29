@@ -4,11 +4,11 @@
  * Board-independent: everything hardware-specific goes through oi_hal_t (implemented per board, and by
  * firmware/tests/sim.c for the simulator).
  *
- * LIMITATION (documented, not solved here): oi_app_rx() is polled and runs a whole pass before returning, so bytes
- * that arrive during a pass are not parsed until it finishes. A real board must receive into a UART/USB ring buffer
- * (interrupt or DMA) large enough for the host's next frame, and the host must use a reply timeout longer than a
- * pass for the first frame after START (or the RX path must answer BUSY from an interrupt). The simulator runs
- * passes in microseconds, so this is not visible there. */
+ * oi_app_rx() runs a whole pass before returning, so it is only for single-threaded use (tests, simulator). A real
+ * board splits it: one context calls oi_app_feed() for each byte (so BUSY is answered while a pass runs) and another
+ * calls oi_app_service() (see firmware/board/rp2040/main.c: core 0 = USB + feed, core 1 = service). Only the job's
+ * pass_ready/busy flags are shared, and the hal.reply callback may be called from both contexts, so it must be
+ * serialised by the board. The split is unit-tested single-threaded (tests/test_app.c); true concurrency is untested. */
 #ifndef OI_APP_H
 #define OI_APP_H
 #include "oi_job.h"
@@ -56,8 +56,16 @@ typedef struct {
 
 /* Returns 0 on success, -1 on invalid config. buf/cap: swath buffer. */
 int oi_app_init(oi_app_t *a, const oi_hal_t *hal, const oi_app_cfg_t *cfg, oi_head_t *head, uint8_t *buf, size_t cap);
-/* Feed one received byte; runs any pass / page-end it completes before returning. */
+/* Single-threaded convenience (tests, simulator): oi_app_feed() then oi_app_service(). */
 void oi_app_rx(oi_app_t *a, uint8_t byte);
+/* Two-context use (real board): the RX context calls oi_app_feed() for every received byte (parses, replies ACK/NAK/BUSY
+ * immediately, never blocks); the machine context calls oi_app_service() in a loop and runs the pass / page end that the
+ * feed made ready (returns 1 if it did work). The job struct's pass_ready/busy handshake is the only shared state. */
+void oi_app_feed(oi_app_t *a, uint8_t byte);
+int oi_app_service(oi_app_t *a);
 /* Transport silence: reset a stalled frame parser and advance idle timers (caps the head after idle_cap_ms). */
 void oi_app_idle(oi_app_t *a, uint32_t dt_ms);
+/* The same, split by owner for the two-context case: RX context resets the parser, machine context runs the page/cap timers. */
+void oi_app_idle_rx(oi_app_t *a);
+void oi_app_idle_machine(oi_app_t *a, uint32_t dt_ms);
 #endif

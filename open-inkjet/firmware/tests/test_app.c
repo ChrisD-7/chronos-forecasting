@@ -93,6 +93,28 @@ static void test_busy_from_isr(void) {
     assert(app.passes == 1 && W.fires == 10 && app.job.idx == 0);
 }
 
+static void feed_bytes_only(const uint8_t *f, size_t n) { for (size_t i = 0; i < n; i++) oi_app_feed(&app, f[i]); }
+
+static void test_split_feed_service_answers_busy_while_pass_pending(void) {
+    oi_app_cfg_t c = base_cfg(); setup(&c, &head8);
+    uint8_t f[1100], pl[13] = { 0, 0, 10, 0, 0, 0, 1, 0, 1, 0x9C, 0x31, 0, 0 };
+    feed_bytes_only(f, oi_frame_build(f, 1, pl, 13));                        /* HDR */
+    uint8_t dp[14]; memset(dp, 0xFF, sizeof dp); dp[0] = dp[1] = dp[2] = dp[3] = 0;
+    feed_bytes_only(f, oi_frame_build(f, 2, dp, 14));                        /* DATA */
+    uint8_t sp[2] = { 0, 0 };
+    feed_bytes_only(f, oi_frame_build(f, 3, sp, 2));                         /* START: ACKed, pass NOT run yet */
+    assert(app.passes == 0 && W.fires == 0 && W.reply_types[W.n_reply - 1] == 4);
+    uint8_t pl2[13] = { 1, 0, 10, 0, 0, 0, 1, 0, 1, 0x9C, 0x31, 0, 0 };
+    feed_bytes_only(f, oi_frame_build(f, 1, pl2, 13));                       /* next HDR arrives while the pass is pending */
+    assert(W.reply_types[W.n_reply - 1] == 6);                               /* BUSY, immediately, without blocking */
+    assert(oi_app_service(&app) == 1 && app.passes == 1 && W.fires == 10);   /* machine context runs it */
+    assert(oi_app_service(&app) == 0);                                       /* nothing more to do */
+    feed_bytes_only(f, oi_frame_build(f, 1, pl2, 13));                       /* buffer free again: ACK */
+    assert(W.reply_types[W.n_reply - 1] == 4);
+    feed_bytes_only(f, oi_frame_build(f, 7, 0, 0));                          /* PAGE_END is accepted only after a pass finished */
+    assert(W.reply_types[W.n_reply - 1] == 4 && oi_app_service(&app) == 1 && !app.page_active);
+}
+
 static void test_ramp_must_fit_both_run_ins(void) {
     oi_app_cfg_t c = base_cfg(); c.accel = 50000;                            /* ramp 810 > margin 300 */
     setup(&c, &head8); send_swath(0, 10, +1);
@@ -199,7 +221,7 @@ int main(void) {
     test_missed_columns_reported_paper_still_fed(); test_stall_watchdog();
     test_positioning_before_pass_when_column_counts_differ(); test_aborted_job_is_capped();
     test_speed_clamped_to_head_limit(); test_paper_accounting(); test_config_and_range_errors();
-    test_fault_is_reported_and_recovers();
+    test_fault_is_reported_and_recovers(); test_split_feed_service_answers_busy_while_pass_pending();
     puts("app tests OK");
     return 0;
 }

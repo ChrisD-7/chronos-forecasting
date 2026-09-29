@@ -15,7 +15,8 @@ def build(holder_holes=((-HOLDER_HOLE_X, 0.0), (HOLDER_HOLE_X, 0.0)), holder_d=3
     bx, by = MGN9H["bolt_x"] / 2, MGN9H["bolt_y"] / 2
     plate = plate.faces(">Z").workplane().pushPoints(
         [(sx * bx, sy * by) for sx in (-1, 1) for sy in (-1, 1)]).hole(3.4)
-    plate = plate.faces(">Z").workplane().pushPoints(list(holder_holes)).hole(holder_d)
+    if holder_holes:
+        plate = plate.faces(">Z").workplane().pushPoints(list(holder_holes)).hole(holder_d)
     return plate
 
 

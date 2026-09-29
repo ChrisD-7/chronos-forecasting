@@ -23,4 +23,11 @@ open('$T/vectors.bin','wb').write(b''.join(frames_for_image(Image.new('L',(64,64
   gcc $CF -o $T/fuzz tests/fuzz_job.c core/oi_job.c core/oi_proto.c && $T/fuzz 300000 )
 if [ "${1:-}" = "--mutate" ]; then python3 tools_mutate.py $T/vectors.bin; fi
 ( cd cad && python3 -m pytest -q test_cad.py && python3 assembly.py )
+( cd electronics && python3 -m pytest -q test_electronics.py && python3 design.py )
+# Board firmware: compiled (not run) against the Pico SDK when PICO_SDK_PATH and arm-none-eabi-gcc are available.
+if [ -n "${PICO_SDK_PATH:-}" ] && command -v arm-none-eabi-gcc >/dev/null; then
+  ( cd firmware/board/rp2040 && cmake -B "$T/board" -G Ninja . >/dev/null && cmake --build "$T/board" 2>&1 | tail -1 && arm-none-eabi-size "$T/board/openinkjet_fw.elf" )
+else
+  echo "SKIPPED board build (set PICO_SDK_PATH to a Pico SDK 2.x checkout with submodules and install gcc-arm-none-eabi)"
+fi
 echo ALL TESTS PASSED

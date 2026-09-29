@@ -4,6 +4,13 @@
 - **Device application core (`firmware/core/oi_app.c`)**, run inside the simulator through a simulated HAL: uncap once per page, spit before printing, wipe after
   the page (`wipe_every_pages`), never fire while capped (`capped_fire=0`), carriage speed clamped to the head fire-rate limit, head re-capped after the idle
   timeout, and two pages in one job (swath indices restart at 0 and print again).
+- **Board firmware (`firmware/board/rp2040`): COMPILED, NOT RUN.** Built against Pico SDK 2.3.1 with arm-none-eabi-gcc 13.2.1 and `-Wall -Wextra -Werror` on our sources:
+  0 warnings, 37 KB text / 66 KB UF2 (dry variant); the armed variant (synthetic map compiled in) also builds and places the pulse routine in RAM.
+  Nothing about its timing, encoder decoding, servo angles, USB throughput or dual-core behaviour has been observed on a board.
+- **Electronics (`electronics/`, 8 tests):** budget arithmetic checked by hand, shift-register count, timing budget vs the configured carriage speed, block-level netlist with
+  ERC-style rules (which caught 2 real defects in my first draft), and a cross-check that `board_config.h` pin numbers equal the netlist's. This is a consistency model, not a circuit.
+- **CAD additions (32 tests total):** carriage bracket (riser + shelf, height derived from the roller and rail stack, 1.5 mm nozzle gap), platen halves, motor mount matching the NEMA 17
+  flange (sourced dims), sensor and encoder brackets; coordinates, edge distances and single-solid checks. The vertical stack is arithmetic on GUESS heights, not a 3D interference check.
 - **Application-core unit tests (`firmware/tests/test_app.c`, scripted fake HAL):** action order over two pages, BUSY answered from an emulated ISR
   mid-pass, ramp must fit BOTH run-in distances (lead and tail, including the exact boundary), missed columns and stalled/backwards encoder reported to the
   host (`T_ERROR`) instead of silently dropped, positioning move before a pass when column counts differ, aborted job capped after `page_timeout_ms`,
@@ -53,10 +60,11 @@
 
 ## Not built / not tested (needs hardware or a real CUPS)
 - Physical printer, printhead pinout and firing electronics, motion/encoder hardware, paper path, ink behaviour, print quality, capping in practice.
-- Board glue for a real MCU: the `oi_hal_t` implementation (step/dir generation with the planned trapezoid, encoder ISR/PIO, head GPIO timing, USB CDC).
-  `oi_app.c` itself is board-independent and tested only against the simulated HAL.
-- Known design limit: `oi_app_rx()` is polled and runs a whole pass before returning (see the comment in `oi_app.h`). On hardware, RX must be interrupt/DMA
-  buffered and the host reply timeout must exceed a pass (or an ISR must answer BUSY); the simulator finishes passes in microseconds so this is not exercised.
-- Paper eject/sheet loading is not modelled: the simulator treats "move to page" as a fresh sheet.
+- Board glue behaviour on real hardware: it compiles (above) but has never run. The feed/service split is unit-tested single-threaded only; true two-core concurrency,
+  USB CDC throughput and the reply mutex are untested. The carriage motion is open-loop step generation with encoder feedback only for position (steps per count is a GUESS).
+- Analog head-driver stage, schematic and PCB (docs/ELECTRONICS.md). Power-up procedure must follow docs/BENCH.md; wrong pulse parameters can destroy a head.
+- Paper handling: no sheet loading, eject or paper-detect logic in firmware (pin reserved); platen supports and mounting to the frame are not designed; the simulator treats
+  "move to page" as a fresh sheet. CAD orientation of cartridge/holder/shelf relative to the paper feed is OPEN until the cartridge is measured.
+- Carriage orientation, rail/block dimensions and the full 3D assembly (interference between all parts) are unverified; only the vertical stack is computed.
 - CUPS integration on a real CUPS install; PDF / cups-raster input route; job options (copies, resolution) are ignored.
 - Parser mid-frame self-healing: relies on transport timeout + `oi_parser_reset` + ACK/retransmit (implemented in sim.c and sender.py).

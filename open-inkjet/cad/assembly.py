@@ -24,6 +24,32 @@ def feed_steps_per_mm():
     return MOTOR_FULL_STEPS * MICROSTEPS / (math.pi * ROLLER_D)     # roller drive, no gearing
 
 
+def stack():
+    """Vertical layout (machine Z, mm) derived from the rail, roller and cartridge parameters. The paper plane is fixed by
+    the feed roller (seat centre from the side plate) and everything above it is derived, so a flat plate on the carriage
+    block could not reach the paper: the bracket needs a riser and a shelf."""
+    seat_z = -20.0                                            # parts.side_plate: bearing seat / roller axis height
+    ext_z = EXT_HOLES[0][1]                                   # extrusion centre height (side plate hole y)
+    paper_top = seat_z + ROLLER_D / 2
+    nozzle_z = paper_top + NOZZLE_GAP
+    block_top = ext_z + EXT_SIZE / 2 + MGN_H_TOTAL
+    plate_top = block_top + PLATE_T
+    shelf_bottom = nozzle_z + HP45_BOX["h"]                   # cartridge hangs below the shelf
+    riser_h = plate_top - shelf_bottom
+    return dict(paper_top=paper_top, nozzle_z=nozzle_z, block_top=block_top, plate_top=plate_top,
+                shelf_bottom=shelf_bottom, riser_h=riser_h)
+
+
+def bracket_layout():
+    """Y positions (machine, front = negative Y). Rear extrusion centre = EXT_HOLES[1][0]; bracket top plate centred on it."""
+    ext_y = EXT_HOLES[1][0]
+    plate_len = MGN9H["length"] + 12.0
+    front_plate = ext_y - plate_len / 2
+    shelf_front = front_plate - SHELF_LEN
+    return dict(ext_y=ext_y, front_plate=front_plate, shelf_front=shelf_front,
+                ext_front=ext_y - EXT_SIZE / 2, holder_y_span=(shelf_front + (SHELF_LEN - 51) / 2, front_plate - (SHELF_LEN - 51) / 2))
+
+
 def checks():
     out = {}
     out["required_stroke_mm"] = required_stroke()
@@ -34,6 +60,11 @@ def checks():
     out["side_plate_inner_spacing_mm"] = PLATE_INNER_SPACING
     out["rail_fits_between_plates"] = RAIL_LEN <= PLATE_INNER_SPACING
     out["feed_steps_per_mm"] = feed_steps_per_mm()
+    st, ly = stack(), bracket_layout()
+    out.update({"stack_" + k: v for k, v in st.items()})
+    out["riser_positive"] = st["riser_h"] > 0
+    out["shelf_clears_extrusion_y"] = ly["front_plate"] - SHELF_LEN < ly["ext_front"] - 3.0     # shelf ends well in front of the extrusion
+    out["nozzle_gap_mm"] = st["nozzle_z"] - st["paper_top"]
     return out
 
 

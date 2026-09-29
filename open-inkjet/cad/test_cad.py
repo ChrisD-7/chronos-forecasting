@@ -110,3 +110,46 @@ def test_assembly_budget():
     assert RAIL_EDGE <= tail < RAIL_EDGE + RAIL_HOLE_PITCH                      # tail edge within one pitch of head edge
     assert 40 < c["feed_steps_per_mm"] < 60
     assert 2 * PAGE_MARGIN + PAGE_W + PARK_ZONE == c["required_stroke_mm"]
+
+
+def test_motor_mount_matches_nema17_flange():
+    holes = cyl_holes(PARTS["motor_mount"]())
+    have = {(h[0], h[1], h[2]) for h in holes}
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            assert (sx * NEMA17["hole_pitch"] / 2, sy * NEMA17["hole_pitch"] / 2, NEMA17["hole_d"] / 2) in have
+    assert (0.0, 0.0, (NEMA17["pilot"] + 0.5) / 2) in have                         # pilot clearance bore
+    bb = PARTS["motor_mount"]().val().BoundingBox()
+    assert bb.xlen >= NEMA17["face"]                                                # plate covers the 42.3 mm flange
+
+
+def test_carriage_bracket_reaches_paper_with_correct_gap():
+    st = assembly.stack()
+    wp = PARTS["carriage_bracket"]()
+    bb = wp.val().BoundingBox()
+    assert bb.zlen == pytest.approx(st["riser_h"], abs=0.01)                        # plate top to shelf bottom
+    # cartridge hangs from the shelf underside: nozzle face = shelf bottom - cartridge height must sit NOZZLE_GAP above the paper
+    assert st["shelf_bottom"] - HP45_BOX["h"] - st["paper_top"] == pytest.approx(NOZZLE_GAP)
+    holes = cyl_holes(wp)
+    shelf_holes = [h for h in holes if abs(abs(h[0]) - HOLDER_HOLE_X) < 0.01 and h[2] == pytest.approx(1.7)]
+    assert len(shelf_holes) == 2                                                    # same +-17 mm pattern as the holder flanges
+    hold = {(h[0], h[1]) for h in cyl_holes(PARTS["cartridge_holder"]())}
+    assert {(h[0], 0.0) for h in shelf_holes} == hold                               # x positions match; y is the shelf centre
+
+
+def test_holder_flanges_are_at_the_top_to_meet_the_shelf():
+    s = PARTS["cartridge_holder"]().val()
+    hh = HP45_BOX["h"] * 0.5
+    assert s.isInside(cq.Vector(HOLDER_HOLE_X + 5.5, 4.0, hh / 2 - 1.5))            # flange material at the top
+    assert not s.isInside(cq.Vector(HOLDER_HOLE_X + 5.5, 4.0, -hh / 2 + 1.5))       # none at the bottom
+
+
+def test_platen_halves_cover_a4_and_fit_bed():
+    assert 2 * PLATEN_HALF["l"] >= PAGE_W + 2 * PAGE_MARGIN and PLATEN_HALF["l"] <= BED_MM
+
+
+def test_stack_checks():
+    c = assembly.checks()
+    assert c["riser_positive"] and c["shelf_clears_extrusion_y"]
+    assert c["nozzle_gap_mm"] == pytest.approx(NOZZLE_GAP)
+    assert c["stack_paper_top"] == -10.0 and c["stack_block_top"] == pytest.approx(70.0)
