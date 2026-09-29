@@ -1,7 +1,10 @@
 # Verification log (2026-09-29, build sandbox). Reproduce with `./run_tests.sh --mutate`.
 
 ## Tested by running code
-- **Host, 42 pytest tests:** geometry, slicer nozzle mapping (vdpi 600..50), protocol/CRC, sender (retransmit, BUSY wait, stale ACK, bounded drain),
+- **Device application core (`firmware/core/oi_app.c`)**, run inside the simulator through a simulated HAL: uncap once per page, spit before printing, wipe after
+  the page (`wipe_every_pages`), never fire while capped (`capped_fire=0`), carriage speed clamped to the head fire-rate limit, head re-capped after the idle
+  timeout, and two pages in one job (swath indices restart at 0 and print again).
+- **Host, 44 pytest tests:** geometry, slicer nozzle mapping (vdpi 600..50), protocol/CRC, sender (retransmit, BUSY wait, stale ACK, bounded drain),
   serial link (EOF, write timeout, resync speed), filter (aspect, margins, alpha, 16-bit, non-square dpi), CUPS filter/backend logic and exit codes,
   PPD structure and mime types, and end-to-end tests.
 - **Firmware, C99 with -Wall -Wextra -Werror and ASan+UBSan:** scheduler, parser, job controller, matrix head, motion, feed, maintenance FSM (unit tests);
@@ -40,7 +43,10 @@
 
 ## Not built / not tested (needs hardware or a real CUPS)
 - Physical printer, printhead pinout and firing electronics, motion/encoder hardware, paper path, ink behaviour, print quality, capping in practice.
-- Device application on the MCU: main loop wiring `oi_job` -> maintenance -> motion -> scheduler -> head, step/dir drivers, encoder ISR, USB CDC (the core
-  modules and their contracts exist and are tested; the board-specific glue does not).
+- Board glue for a real MCU: the `oi_hal_t` implementation (step/dir generation with the planned trapezoid, encoder ISR/PIO, head GPIO timing, USB CDC).
+  `oi_app.c` itself is board-independent and tested only against the simulated HAL.
+- Known design limit: `oi_app_rx()` is polled and runs a whole pass before returning (see the comment in `oi_app.h`). On hardware, RX must be interrupt/DMA
+  buffered and the host reply timeout must exceed a pass (or an ISR must answer BUSY); the simulator finishes passes in microseconds so this is not exercised.
+- Paper eject/sheet loading is not modelled: the simulator treats "move to page" as a fresh sheet.
 - CUPS integration on a real CUPS install; PDF / cups-raster input route; job options (copies, resolution) are ignored.
 - Parser mid-frame self-healing: relies on transport timeout + `oi_parser_reset` + ACK/retransmit (implemented in sim.c and sender.py).

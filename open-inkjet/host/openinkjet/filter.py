@@ -7,7 +7,7 @@ from .heads import HP45
 from .geometry import A4_MM, MM_PER_INCH
 from .halftone import floyd_steinberg
 from .slicer import slice_page, swath_feed_mm
-from .protocol import swath_frames
+from .protocol import swath_frames, encode, T_PAGE_END
 
 
 MARGIN_MM = 4.0  # GUESS: unprintable border until measured on hardware
@@ -55,6 +55,7 @@ def frames_for_image(img, hdpi=300, vdpi=300, head=HP45):
     for i, sw in enumerate(slice_page(bm, head, vdpi)):
         direction = 1 if i % 2 == 0 else -1
         yield from swath_frames(i, pack_columns(sw), sw.shape[0], bpc, direction, feed_um)
+    yield encode(T_PAGE_END)
 
 
 def main(argv=None):

@@ -1,7 +1,7 @@
 #include "oi_job.h"
 #include <string.h>
 
-enum { T_HDR = 1, T_DATA = 2, T_START = 3, T_ACK = 4, T_NAK = 5, T_BUSY = 6 };
+enum { T_HDR = 1, T_DATA = 2, T_START = 3, T_ACK = 4, T_NAK = 5, T_BUSY = 6, T_PAGE_END = 7 };
 
 size_t oi_frame_build(uint8_t *out, uint8_t type, const uint8_t *payload, uint16_t len) {
     out[0] = OI_SOF; out[1] = type; out[2] = (uint8_t)(len & 0xFF); out[3] = (uint8_t)(len >> 8);
@@ -28,7 +28,7 @@ static uint32_t rd32(const uint8_t *p) { return (uint32_t)p[0] | ((uint32_t)p[1]
 /* returns 1 = ACK, 0 = NAK, 2 = BUSY */
 static int handle(oi_job_t *j) {
     const oi_parser_t *p = &j->parser;
-    if ((p->type == T_HDR || p->type == T_DATA || p->type == T_START) && (j->pass_ready || j->busy)) {
+    if ((p->type == T_HDR || p->type == T_DATA || p->type == T_START || p->type == T_PAGE_END) && (j->pass_ready || j->busy)) {
         /* a repeated START for the pass we already accepted is still an ACK, not BUSY (lost-ACK retransmit) */
         if (!(p->type == T_START && p->len == 2 && j->started && rd16(p->payload) == j->idx)) return 2;
     }
@@ -40,7 +40,7 @@ static int handle(oi_job_t *j) {
         if (d != 1 && d != -1) return 0;
         j->idx = rd16(p->payload); j->columns = cols; j->bytes_per_col = bpc; j->dir = d;
         j->feed_um = rd32(p->payload + 9);
-        j->total = (size_t)cols * bpc; j->received = 0; j->have_hdr = 1; j->pass_ready = 0; j->started = 0;
+        j->total = (size_t)cols * bpc; j->received = 0; j->have_hdr = 1; j->pass_ready = 0; j->started = 0; j->page_end_seen = 0;
         return 1;
     }
     if (p->type == T_DATA) {
@@ -57,6 +57,12 @@ static int handle(oi_job_t *j) {
         if (j->have_hdr && j->started && idx == j->idx) { j->dup_acks++; return 1; }   /* idempotent: never print a swath twice */
         if (!j->have_hdr || idx != j->idx || j->received != j->total) return 0;
         j->started = 1; j->pass_ready = 1;
+        return 1;
+    }
+    if (p->type == T_PAGE_END) {
+        if (p->len != 0 || !j->have_hdr) return 0;               /* a page must have had at least one swath */
+        if (j->page_end_seen) { j->dup_acks++; return 1; }       /* retransmit: no second page end */
+        j->page_end_seen = 1; j->page_end = 1;
         return 1;
     }
     return 0;
@@ -79,3 +85,4 @@ int oi_job_take_pass(oi_job_t *j) {
     return r;
 }
 void oi_job_pass_done(oi_job_t *j) { j->busy = 0; }
+int oi_job_take_page_end(oi_job_t *j) { int r = j->page_end; j->page_end = 0; return r; }

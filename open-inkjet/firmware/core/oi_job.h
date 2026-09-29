@@ -18,6 +18,8 @@ typedef struct {
     int pass_ready;          /* START accepted, pass not yet taken */
     int busy;                /* pass taken and running: buffer is owned by the machine until oi_job_pass_done() */
     int started;             /* START already accepted for the current header (dedupe key with idx) */
+    int page_end;            /* PAGE_END accepted, not yet taken by the application */
+    int page_end_seen;       /* PAGE_END already accepted since the last HDR (dedupe) */
     uint32_t naks, dup_acks, busys;
 } oi_job_t;
 
@@ -31,5 +33,7 @@ int oi_job_take_pass(oi_job_t *j);
 /* The machine finished printing the taken pass; the buffer may be overwritten again.
  * While pass_ready/busy the job answers HDR/DATA/START with BUSY (the host waits and retries, see sender.py). */
 void oi_job_pass_done(oi_job_t *j);
+/* Non-zero once per page when PAGE_END was accepted (only after the last pass finished). */
+int oi_job_take_page_end(oi_job_t *j);
 size_t oi_frame_build(uint8_t *out, uint8_t type, const uint8_t *payload, uint16_t len);
 #endif

@@ -11,7 +11,7 @@ that turn placeholders into measurements. `docs/PLAN.md` holds the original plan
 | Path | Contents | License |
 |---|---|---|
 | `cad/`, `bom/` | parametric CadQuery parts (side plate, carriage plate, cartridge holder, roller block, cap base), assembly checks, BOM | CERN-OHL-S-2.0 |
-| `firmware/core` | C99: protocol parser, job controller (ACK/NAK/BUSY), encoder-synced fire scheduler, matrix head driver, motion + feed planner, maintenance FSM | GPL-3.0-only |
+| `firmware/core` | C99: protocol parser, job controller (ACK/NAK/BUSY/page end), encoder-synced fire scheduler, matrix head driver, motion + feed planner, maintenance FSM, board-independent application core (`oi_app`, HAL-based) | GPL-3.0-only |
 | `firmware/tests` | unit tests, fuzzer, full printer simulator (`sim.c`) | GPL-3.0-only |
 | `host/openinkjet` | geometry, slicer, halftone, protocol, sender, serial link, CUPS filter/backend | GPL-3.0-only |
 | `host/bin`, `host/cups`, `host/install_cups.sh` | CUPS executables, PPD, installer (untested on real CUPS) | GPL-3.0-only |

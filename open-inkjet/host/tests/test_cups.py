@@ -74,7 +74,7 @@ def test_backend_over_pty_to_real_firmware_sim(tmp_path):
     import pty, tty, subprocess
     sys.path.insert(0, os.path.dirname(__file__))
     import test_e2e_sim as e2e
-    src = ["tests/sim.c"] + [f"core/{n}.c" for n in ("oi_job", "oi_proto", "oi_sched", "oi_head_matrix", "oi_motion")]
+    src = ["tests/sim.c"] + [f"core/{n}.c" for n in ("oi_app", "oi_job", "oi_proto", "oi_sched", "oi_head_matrix", "oi_motion", "oi_maint")]
     sim = str(tmp_path / "oi_sim")
     subprocess.run(["gcc", "-std=c99", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Wextra", "-Werror", "-o", sim] + src,
                    cwd=e2e.FW, check=True)

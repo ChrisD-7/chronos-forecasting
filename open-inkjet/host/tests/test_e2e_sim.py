@@ -15,7 +15,7 @@ SIM = None   # set by the build_sim fixture (private temp dir)
 def build_sim(tmp_path_factory):
     global SIM
     SIM = str(tmp_path_factory.mktemp("sim") / "oi_sim")
-    src = ["tests/sim.c"] + [f"core/{n}.c" for n in ("oi_job", "oi_proto", "oi_sched", "oi_head_matrix", "oi_motion")]
+    src = ["tests/sim.c"] + [f"core/{n}.c" for n in ("oi_app", "oi_job", "oi_proto", "oi_sched", "oi_head_matrix", "oi_motion", "oi_maint")]
     subprocess.run(["gcc", "-std=c99", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Wextra", "-Werror",
                     "-fsanitize=address,undefined", "-o", SIM] + src, cwd=FW, check=True)
 
@@ -99,6 +99,37 @@ def test_clean_link_prints_exact_page():
     want = expected(img)
     assert got.shape == want.shape
     assert np.array_equal(got, want), f"{(got != want).sum()} differing dots"
+
+
+def stat(err, key):
+    return int(err.split(key + "=")[1].split()[0])
+
+
+def test_maintenance_sequence_and_cap_safety():
+    """The real application core must uncap once, spit before printing, wipe after the page, never fire into the
+    closed cap, stay within the head fire-rate limit, and re-cap the head after the idle timeout."""
+    got, rc, err = print_page(make_image())
+    assert rc == 0, err
+    assert stat(err, "uncap") == 1 and stat(err, "spit") == 1 and stat(err, "wipe") == 1
+    assert stat(err, "capped_fire") == 0 and stat(err, "pass_err") == 0 and stat(err, "faults") == 0
+    assert stat(err, "cap") == 1 and stat(err, "final_capped") == 1       # idle timeout parked the head
+    assert stat(err, "max_speed") <= 18000 * 2                            # never above the head's fire-rate limit (counts/s)
+
+
+def test_two_pages_in_one_job_reuse_swath_indices():
+    """Second page restarts at swath idx 0: must print again (not be deduped), with its own uncap-free start."""
+    img1 = make_image()
+    img2 = img1.transpose(Image.FLIP_LEFT_RIGHT)                          # different content: a skipped page 2 would show
+    frames = list(frames_for_image(img1)) + list(frames_for_image(img2))
+    with tempfile.TemporaryDirectory() as d:
+        out = os.path.join(d, "o.pbm")
+        s = Sim(out)
+        send_frames(iter(frames), s.write, s.read_frame)
+        rc, err = s.finish()
+        assert rc == 0, err
+        assert stat(err, "passes") == 48 and stat(err, "uncap") == 1 and stat(err, "wipe") == 2
+        assert stat(err, "pass_err") == 0 and stat(err, "dups") == 0
+        assert np.array_equal(read_pbm(out), expected(img2)) and not np.array_equal(expected(img1), expected(img2))
 
 
 def test_bidirectional_lag_needs_offset_correction():

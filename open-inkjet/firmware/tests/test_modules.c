@@ -221,6 +221,21 @@ static void test_job(void) {
     { uint8_t p14[14] = { 3, 0, 4, 0, 0, 0, 2, 0, 1, 0x9C, 0x30, 0, 0, 0 };     /* otherwise valid header + 1 stray byte */
       n = oi_frame_build(f, 1, p14, 14); feed_frame(&j, f, n); assert(out[1] == 5);   /* HDR len != 13 */
       uint8_t p12[12] = {0}; n = oi_frame_build(f, 1, p12, 12); feed_frame(&j, f, n); assert(out[1] == 5); }
+    /* PAGE_END: refused before any header, BUSY while a pass runs, ACKed once, duplicates ACKed without a 2nd event */
+    { static uint8_t b2[64]; oi_job_t k; oi_job_init(&k, b2, sizeof b2);
+      n = oi_frame_build(f, 7, 0, 0); feed_frame(&k, f, n); assert(is_nak_echo(f, n) && !oi_job_take_page_end(&k));
+      n = hdr(f, 0, 2, 2, 1); feed_frame(&k, f, n); n = data(f, 0, d, 4); feed_frame(&k, f, n);
+      n = start(f, 0); feed_frame(&k, f, n); assert(oi_job_take_pass(&k) == 1);
+      n = oi_frame_build(f, 7, 0, 0); feed_frame(&k, f, n); assert(out[1] == 6 && !oi_job_take_page_end(&k));   /* BUSY mid-pass */
+      oi_job_pass_done(&k);
+      n = oi_frame_build(f, 7, 0, 0); feed_frame(&k, f, n); assert(is_ack(n, f));
+      assert(oi_job_take_page_end(&k) == 1 && oi_job_take_page_end(&k) == 0);          /* taken exactly once */
+      n = oi_frame_build(f, 7, 0, 0); feed_frame(&k, f, n); assert(is_ack(n, f) && !oi_job_take_page_end(&k));   /* retransmit */
+      uint8_t junk[1] = {0}; n = oi_frame_build(f, 7, junk, 1); feed_frame(&k, f, n); assert(out[1] == 5);        /* payload not allowed */
+      n = hdr(f, 0, 2, 2, 1); feed_frame(&k, f, n);                                    /* next page starts */
+      n = data(f, 0, d, 4); feed_frame(&k, f, n); n = start(f, 0); feed_frame(&k, f, n);
+      assert(oi_job_take_pass(&k) == 1); oi_job_pass_done(&k);
+      n = oi_frame_build(f, 7, 0, 0); feed_frame(&k, f, n); assert(is_ack(n, f) && oi_job_take_page_end(&k) == 1); }  /* new page, new event */
     replies = 0; uint8_t bad[8] = {0xA5, 3, 2, 0, 0, 0, 0, 0}; feed_frame(&j, bad, 8);
     assert(replies == 0);                                                        /* CRC-invalid frame: silence, host retransmits */
 }
