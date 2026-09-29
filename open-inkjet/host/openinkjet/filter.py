@@ -1,5 +1,5 @@
 """CLI filter: image (stdin or file) -> A4 bitmap at hdpi x vdpi -> halftone -> swath frames on stdout.
-NOTE: not a CUPS raster filter yet (no PPD/backend); it is the pipeline core a CUPS wrapper would call."""
+NOTE: this module is the pipeline core. cups.py wraps it as a CUPS filter/backend for direct PNG/PBM jobs (untested on a real CUPS); there is no PDF/cups-raster route yet."""
 import argparse, sys
 import numpy as np
 from PIL import Image

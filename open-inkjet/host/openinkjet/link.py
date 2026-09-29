@@ -1,46 +1,82 @@
 """Byte-stream link (serial tty, pipe, socket fd) with frame-level reads that time out."""
-import os, select
+import os, select, stat
 from . import protocol as p
+from .sender import LinkError, LinkClosed
 
 
 class FdLink:
-    def __init__(self, read_fd: int, write_fd: int, timeout: float = 0.3):
-        self.r, self.w, self.timeout, self.buf = read_fd, write_fd, timeout, b""
+    def __init__(self, read_fd: int, write_fd: int, timeout: float = 0.3, write_timeout: float = 5.0):
+        self.r, self.w, self.timeout, self.write_timeout = read_fd, write_fd, timeout, write_timeout
+        self.buf = bytearray()
+
+    def close(self):
+        for fd in {self.r, self.w}:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
     def write(self, data: bytes):
         view = memoryview(data)
         while view:
-            n = os.write(self.w, view)
+            _, ready, _ = select.select([], [self.w], [], self.write_timeout)
+            if not ready:
+                raise LinkError("write timed out (device not draining)")
+            try:
+                n = os.write(self.w, view)
+            except BlockingIOError:
+                continue
+            except OSError as e:
+                raise LinkClosed("write failed: %s" % e)
             view = view[n:]
 
     def read_frame(self):
-        """Return (ftype, payload), or None if no complete valid frame arrives within `timeout`."""
+        """Return (ftype, payload); None if no complete valid frame arrives within `timeout`.
+        Raises LinkClosed on EOF or read error (device gone)."""
         while True:
-            try:
-                t, pl, n = p.decode(self.buf)
-                self.buf = self.buf[n:]
-                return t, pl
-            except p.NeedMore:
-                pass
-            except ValueError:
-                self.buf = self.buf[1:]          # resync: drop one byte, hunt for the next SOF
-                continue
+            i = self.buf.find(bytes([p.SOF]))
+            if i < 0:
+                self.buf.clear()
+            elif i > 0:
+                del self.buf[:i]                       # skip garbage before the next SOF in one step
+            if self.buf:
+                try:
+                    t, pl, n = p.decode(bytes(self.buf))
+                    del self.buf[:n]
+                    return t, pl
+                except p.NeedMore:
+                    pass
+                except ValueError:
+                    del self.buf[:1]                   # false SOF (0xA5 inside payload): drop it, look for the next
+                    continue
             ready, _, _ = select.select([self.r], [], [], self.timeout)
             if not ready:
                 return None
-            chunk = os.read(self.r, 4096)
+            try:
+                chunk = os.read(self.r, 4096)
+            except OSError as e:
+                raise LinkClosed("read failed: %s" % e)
             if not chunk:
-                return None
+                raise LinkClosed("device closed the link")
             self.buf += chunk
 
 
 def open_serial(path: str, baud_const=None) -> FdLink:
-    """Open a tty in raw mode. baud_const: a termios.B* constant (default B115200)."""
+    """Open a tty in raw mode (path must already be validated by the caller). Non-tty devices are rejected.
+    baud_const: a termios.B* constant (default B115200)."""
     import termios, tty
-    fd = os.open(path, os.O_RDWR | os.O_NOCTTY)
-    tty.setraw(fd)
-    attrs = termios.tcgetattr(fd)
-    b = baud_const if baud_const is not None else termios.B115200
-    attrs[4] = attrs[5] = b
-    termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)   # O_NONBLOCK: never hang on open
+    try:
+        if not stat.S_ISCHR(os.fstat(fd).st_mode) or not os.isatty(fd):
+            raise OSError("%s is not a tty" % path)
+        os.set_blocking(fd, True)
+        tty.setraw(fd)
+        attrs = termios.tcgetattr(fd)
+        b = baud_const if baud_const is not None else termios.B115200
+        attrs[2] |= termios.CLOCAL | termios.CREAD
+        attrs[4] = attrs[5] = b
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    except (OSError, termios.error):
+        os.close(fd)
+        raise
     return FdLink(fd, fd)

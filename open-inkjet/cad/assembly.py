@@ -1,18 +1,37 @@
 """Assembly-level consistency checks that need no CAD kernel: numbers that must agree across parts."""
+import math
 from params import *
 
 
-def required_travel():
-    return PAGE_W + 2 * PAGE_MARGIN + CARRIAGE_BODY_W + PARK_ZONE
+def required_stroke():
+    """Carriage travel needed: page + margins + park zone (capping/wiping)."""
+    return PAGE_W + 2 * PAGE_MARGIN + PARK_ZONE
+
+
+def available_stroke():
+    """Carriage-block travel on the rail after subtracting the block and end-stop room."""
+    return RAIL_LEN - CARRIAGE_BODY_W - 2 * STOP_MARGIN
+
+
+def rail_holes():
+    n = int((RAIL_LEN - 2 * RAIL_EDGE) // RAIL_HOLE_PITCH) + 1
+    return [RAIL_EDGE + i * RAIL_HOLE_PITCH for i in range(n)]
+
+
+def feed_steps_per_mm():
+    return MOTOR_FULL_STEPS * MICROSTEPS / (math.pi * ROLLER_D)     # roller drive, no gearing
 
 
 def checks():
     out = {}
-    out["rail_long_enough"] = RAIL_LEN >= required_travel()
-    out["rail_margin_mm"] = RAIL_LEN - required_travel()
-    # page must fit between the inner faces of the side plates, leaving room for the frame span
-    out["side_plate_spacing_mm"] = PAGE_W + 2 * PAGE_MARGIN + 2 * 25.0   # 25 mm each side for roller ends/bearings
-    out["rail_spans_side_plates"] = RAIL_LEN <= out["side_plate_spacing_mm"] + 2 * SIDE_PLATE["t"] + 2 * 40.0
+    out["required_stroke_mm"] = required_stroke()
+    out["available_stroke_mm"] = available_stroke()
+    out["stroke_slack_mm"] = available_stroke() - required_stroke()
+    out["rail_holes"] = len(rail_holes())
+    out["backing_extrusion_len_mm"] = RAIL_LEN                       # rail is bolted along its full length
+    out["side_plate_inner_spacing_mm"] = PLATE_INNER_SPACING
+    out["rail_fits_between_plates"] = RAIL_LEN <= PLATE_INNER_SPACING
+    out["feed_steps_per_mm"] = feed_steps_per_mm()
     return out
 
 

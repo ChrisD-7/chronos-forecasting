@@ -1,11 +1,12 @@
 """Carriage adapter plate: bolts to an MGN9H block; has a 2-hole pattern for the cartridge holder
 (pattern is a placeholder until the HP45 cartridge is measured)."""
 import cadquery as cq
-from params import MGN9H, PLATE_T, PLATE_MARGIN, BED_MM
+from params import MGN9H, PLATE_T, PLATE_MARGIN, BED_MM, HOLDER_HOLE_X
 
 
-def build(holder_holes=((-12.0, 0.0), (12.0, 0.0)), holder_d=3.4):
-    w = MGN9H["width"] + 2 * PLATE_MARGIN
+def build(holder_holes=((-HOLDER_HOLE_X, 0.0), (HOLDER_HOLE_X, 0.0)), holder_d=3.4):
+    # wide enough that the holder bolts keep >= 2.3 mm edge distance
+    w = max(MGN9H["width"] + 2 * PLATE_MARGIN, 2 * (HOLDER_HOLE_X + holder_d / 2 + 2.3))
     l = MGN9H["length"] + 2 * PLATE_MARGIN
     plate = cq.Workplane("XY").box(w, l, PLATE_T)
     # clearance holes for M3 (3.4 mm) at the carriage bolt pattern

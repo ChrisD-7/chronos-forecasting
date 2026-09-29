@@ -2,7 +2,7 @@
 
 Everything in software is simulated: `firmware/tests/sim.c` uses a PLACEHOLDER nozzle map, ideal motors and ink flight
 modelled as a constant lag. These procedures replace those assumptions with measurements. Record results in
-`docs/MEASUREMENTS.md` (create it) and fix the tagged values in `cad/params.py`, `host/openinkjet/heads.py`.
+`docs/MEASUREMENTS.md` (template exists, empty) and fix the tagged values in `cad/params.py`, `host/openinkjet/heads.py`. Firmware knobs named below (`counts_per_dot`, `bidir_offset_counts`, `spit_before_pass`, steps/mm) are C struct fields / init arguments in `firmware/core` (the device application that sets them from measured values does not exist yet), not host configuration.
 
 ## Phase 2: HP45 printhead
 1. Caliper the cartridge outline and contact pad pitch -> `cad/params.py: HP45_BOX`. Do not print holders before this.
@@ -27,5 +27,5 @@ modelled as a constant lag. These procedures replace those assumptions with meas
 2. Skew: print a full-width line, feed 250 mm, print another; measure parallelism.
 
 ## Phase 5/6: full page and maintenance
-1. 300 dpi A4 test image through `oi_filter` -> USB serial -> printer; inspect banding at swath joins (feed error).
+1. 300 dpi A4 test image through `oi_filter` (host/bin, installed by host/install_cups.sh) -> USB serial -> printer; the device-side application is not written yet; inspect banding at swath joins (feed error).
 2. Tune spit count (`spit_before_pass`), wipe interval and idle-cap time; 50-page run with nozzle check before/after.

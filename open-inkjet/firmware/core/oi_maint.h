@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 typedef enum { M_CAPPED, M_UNCAPPING, M_SPITTING, M_READY, M_PRINTING, M_WIPING, M_CAPPING, M_FAULT } oi_maint_state_t;
-typedef enum { A_NONE, A_MOVE_TO_PARK, A_CAP, A_UNCAP, A_SPIT, A_WIPE, A_MOVE_TO_PAGE } oi_maint_action_t;
+typedef enum { A_NONE, A_MOVE_TO_PARK, A_CAP, A_UNCAP, A_SPIT, A_WIPE, A_MOVE_TO_PAGE, A_BUSY } oi_maint_action_t;
 
 typedef struct {
     oi_maint_state_t state;
@@ -15,7 +15,9 @@ typedef struct {
 } oi_maint_t;
 
 void oi_maint_init(oi_maint_t *m, uint32_t idle_cap_after_ms, uint32_t wipe_every_pages, uint32_t spit);
-/* Job requested: returns next action to perform (drives head out of the cap first). Faults if already printing. */
+/* Job requested: returns next action to perform (drives head out of the cap first).
+ * A_BUSY (state unchanged) while a maintenance move is in progress: retry after it completes.
+ * Faults if a job is already printing (protocol violation). */
 oi_maint_action_t oi_maint_begin_job(oi_maint_t *m);
 /* Call after the previous action completed; returns the next action or A_NONE when the state settled. */
 oi_maint_action_t oi_maint_step(oi_maint_t *m);
@@ -25,4 +27,6 @@ oi_maint_action_t oi_maint_page_done(oi_maint_t *m);
 oi_maint_action_t oi_maint_tick(oi_maint_t *m, uint32_t dt_ms);
 /* Printing is only permitted in M_PRINTING. */
 int oi_maint_may_fire(const oi_maint_t *m);
+/* Leave M_FAULT: cap/head position is unknown, so the state becomes M_CAPPED and the caller must re-home first. */
+void oi_maint_clear_fault(oi_maint_t *m);
 #endif

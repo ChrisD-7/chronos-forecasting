@@ -178,3 +178,46 @@ def test_max_payload_matches_firmware_header():
     hdr = (pathlib.Path(__file__).parents[2] / "firmware/core/oi_proto.h").read_text()
     assert int(re.search(r"OI_MAX_PAYLOAD (\d+)", hdr).group(1)) == p.MAX_PAYLOAD
     assert int(re.search(r"OI_SOF (0x[0-9A-Fa-f]+)", hdr).group(1), 16) == p.SOF
+
+
+def test_sender_busy_waits_without_using_retries_then_times_out():
+    from openinkjet.sender import send_frames, LinkError
+    f1 = p.encode(p.T_START_PASS, b"\x00\x00")
+    replies = iter([_ack(f1, p.T_BUSY)] * 20 + [_ack(f1)])
+    sleeps, sent = [], []
+    send_frames([f1], sent.append, lambda: next(replies), retries=1, sleep=sleeps.append)
+    assert len(sent) == 21 and len(sleeps) == 20                 # 20 BUSY answers did not exhaust retries=1
+    t = {"now": 0.0}
+    def clock():
+        t["now"] += 1.0; return t["now"]
+    with pytest.raises(LinkError):
+        send_frames([f1], lambda b: None, lambda: _ack(f1, p.T_BUSY), busy_timeout=5.0, sleep=lambda s: None, clock=clock)
+
+
+def test_fdlink_eof_and_write_timeout_and_resync_cost():
+    import os, time
+    from openinkjet.link import FdLink
+    from openinkjet.sender import LinkClosed, LinkError
+    r, w = os.pipe(); l = FdLink(r, w, timeout=0.05)
+    os.close(w); l.w = os.open(os.devnull, os.O_WRONLY)
+    with pytest.raises(LinkClosed):
+        l.read_frame()                                            # EOF is not a timeout
+    os.close(r); os.close(l.w)
+    r2, w2 = os.pipe(); os.set_blocking(w2, False)
+    l2 = FdLink(r2, w2, write_timeout=0.2)
+    with pytest.raises(LinkError):                                # nobody reads: pipe fills, write times out
+        for _ in range(200):
+            l2.write(b"x" * 65536)
+    os.close(r2); os.close(w2)
+    # resync over junk full of false SOF bytes must stay fast
+    r3, w3 = os.pipe(); l3 = FdLink(r3, w3, timeout=0.05)
+    junk = (b"\xa5\xff\xff\xff" * 50000)                      # 200 KB, every 4th byte a false SOF with huge length
+    good = p.encode(p.T_ACK, b"\x01\x02")
+    os.set_blocking(w3, False)
+    import threading
+    th = threading.Thread(target=lambda: (os.set_blocking(w3, True), os.write(w3, junk + good), os.close(w3))); th.start()
+    t0 = time.time(); got = None
+    while got is None and time.time() - t0 < 5:
+        got = l3.read_frame()
+    th.join(); os.close(r3)
+    assert got == (p.T_ACK, b"\x01\x02") and time.time() - t0 < 3

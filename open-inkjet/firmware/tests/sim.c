@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
     memset(inv, -1, sizeof inv);
     for (int n = 0; n < NOZ; n++) inv[nozzle_map[n] >> 8][nozzle_map[n] & 0xFF] = (int16_t)n;
     if (oi_matrix_head_init(&mhead, &HAL, nozzle_map, NOZ, NADDR, NPRIM)) return 3;
-    oi_feed_init(&feed, 157480);                          /* deliberately fractional steps/mm */
+    if (oi_feed_init(&feed, 157480)) return 3;            /* deliberately fractional steps/mm */
     oi_job_init(&job, swath_buf, sizeof swath_buf);
     struct pollfd pf = { 0, POLLIN, 0 };
     for (;;) {
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
         if (n <= 0) break;
         for (ssize_t i = 0; i < n; i++) {
             oi_job_feed(&job, chunk[i], reply, 0);
-            if (oi_job_take_pass(&job)) run_pass(bidir);
+            if (oi_job_take_pass(&job)) { run_pass(bidir); oi_job_pass_done(&job); }
         }
     }
     FILE *f = fopen(argv[1], "wb");
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
     int stride = (cols_used + 7) / 8;
     for (int y = 0; y < rows_used; y++) fwrite(canvas[y], 1, (size_t)stride, f);
     fclose(f);
-    fprintf(stderr, "passes=%d cols=%d rows=%d naks=%u dups=%u odd=%ld oob=%ld plan_err=%d crc_err=%u\n", passes, cols_used,
-            rows_used, job.naks, job.dup_acks, errors_odd_nozzle, errors_oob, plan_errors, job.parser.crc_errors);
+    fprintf(stderr, "passes=%d cols=%d rows=%d naks=%u dups=%u busys=%u odd=%ld oob=%ld plan_err=%d crc_err=%u\n", passes, cols_used,
+            rows_used, job.naks, job.dup_acks, job.busys, errors_odd_nozzle, errors_oob, plan_errors, job.parser.crc_errors);
     return (errors_odd_nozzle || errors_oob || plan_errors) ? 5 : 0;
 }

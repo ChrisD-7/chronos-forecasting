@@ -8,11 +8,13 @@ from openinkjet.filter import frames_for_image, page_bitmap
 from openinkjet.sender import send_frames, LinkError
 
 FW = os.path.join(os.path.dirname(__file__), "..", "..", "firmware")
-SIM = "/tmp/oi_sim"
+SIM = None   # set by the build_sim fixture (private temp dir)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def build_sim():
+def build_sim(tmp_path_factory):
+    global SIM
+    SIM = str(tmp_path_factory.mktemp("sim") / "oi_sim")
     src = ["tests/sim.c"] + [f"core/{n}.c" for n in ("oi_job", "oi_proto", "oi_sched", "oi_head_matrix", "oi_motion")]
     subprocess.run(["gcc", "-std=c99", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Wextra", "-Werror",
                     "-fsanitize=address,undefined", "-o", SIM] + src, cwd=FW, check=True)
@@ -111,23 +113,34 @@ def test_bidirectional_lag_needs_offset_correction():
 
 def test_lossy_link_still_prints_exact_page():
     img = make_image()
-    state = {"n": 0}
+    state = {"n": 0, "flips": 0, "truncs": 0}
 
     def mangle(write):
         def w(b):
             state["n"] += 1
             k = state["n"]
             if k % 40 == 7:                                   # payload bit flip -> CRC error -> no reply -> retransmit
-                b = bytearray(b); b[len(b) // 2] ^= 0x10; b = bytes(b)
+                b = bytearray(b); b[len(b) // 2] ^= 0x10; b = bytes(b); state["flips"] += 1
             elif k % 97 == 11:                                # truncated frame -> parser stalls -> sim timeout reset
-                b = b[:-2]
+                b = b[:-2]; state["truncs"] += 1
             write(b)
         return w
     got, rc, err = print_page(img, mangle=mangle)
     assert rc == 0, err
     assert np.array_equal(got, expected(img))
     crc_err = int(err.split("crc_err=")[1].split()[0])
-    assert crc_err > 0                                        # the corruption really happened
+    assert state["flips"] > 5 and state["truncs"] > 5         # both fault types really were injected
+    assert crc_err >= state["flips"]                          # every bit flip was rejected by the device CRC
+    assert "passes=24" in err                                 # and each swath still printed exactly once (idempotent)
+
+
+def test_nak_forever_and_stale_flood_are_bounded():
+    f = frames_for_image(make_image())
+    first = next(f)
+    with pytest.raises(LinkError):                            # device NAKs every frame
+        send_frames([first], lambda b: None, lambda: (p.T_NAK, struct.pack("<H", p.frame_crc(first))), retries=3)
+    with pytest.raises(LinkError):                            # device floods replies for OTHER frames faster than the timeout
+        send_frames([first], lambda b: None, lambda: (p.T_ACK, b"\x00\x00"), retries=2)
 
 
 def test_dead_link_raises():

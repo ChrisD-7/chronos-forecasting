@@ -11,7 +11,9 @@ oi_maint_action_t oi_maint_begin_job(oi_maint_t *m) {
     m->idle_ms = 0;
     if (m->state == M_CAPPED) { m->state = M_UNCAPPING; return A_UNCAP; }
     if (m->state == M_READY) { m->state = M_PRINTING; return A_MOVE_TO_PAGE; }
-    m->state = M_FAULT; return A_NONE;                /* busy/printing/faulted: caller must not start */
+    if (m->state == M_UNCAPPING || m->state == M_SPITTING || m->state == M_WIPING || m->state == M_CAPPING)
+        return A_BUSY;                                 /* maintenance move in progress: retry later, no fault */
+    m->state = M_FAULT; return A_NONE;                /* printing/faulted: caller violated the protocol */
 }
 
 oi_maint_action_t oi_maint_step(oi_maint_t *m) {
@@ -43,3 +45,4 @@ oi_maint_action_t oi_maint_tick(oi_maint_t *m, uint32_t dt_ms) {
 }
 
 int oi_maint_may_fire(const oi_maint_t *m) { return m->state == M_PRINTING; }
+void oi_maint_clear_fault(oi_maint_t *m) { if (m->state == M_FAULT) { m->state = M_CAPPED; m->idle_ms = 0; m->pages_since_wipe = 0; } }

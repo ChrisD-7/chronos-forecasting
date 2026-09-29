@@ -1,11 +1,22 @@
-# Draft BOM (v0, unpriced, quantities from the plan; verify each part against the real dimensions before ordering)
+# Draft BOM (v0, unpriced). Quantities follow cad/ and assembly.py; every part must be checked against the real
+# dimensions (cad/params.py tags: GUESS / SOURCED) before ordering.
 | Item | Qty | Note |
 |---|---|---|
-| MGN9H rail 300 mm + carriage | 1 | alt: MGN12H, benchmark both |
-| NEMA17 stepper + GT2 belt/pulleys | 1 set | carriage drive |
-| Feed roller, idler, NEMA17 | 1 set | paper feed |
-| Linear optical encoder strip + reader | 1 | position-timed firing |
+| MGN9H rail 350 mm + carriage block | 1 | 350 mm stock length is SOURCED (vendors list 150/300/350/400); alt MGN12H, benchmark both |
+| 2020 aluminium extrusion, 350 mm | 2 | rear: rail backing (rail bolted along its full length, 17 holes at 20 mm pitch, GUESS pitch); front: platen/paper guide |
+| M5 x 10-16 bolts + 2020 T-nuts / end-tap | 4 | side plate to extrusion ends (cad/parts.py EXT_HOLES) |
+| M3 screws, nuts/nut traps | ~40 | 15 rail screws (length = rail counterbore + extrusion thread, measure), 4 carriage-to-plate, 2 holder, 2+ roller block, cap; none modelled as nut traps yet |
+| Side plates (printed) | 2 | PETG/ASA, 180 x 150 x 10 mm, fits a 220 mm bed |
+| Carriage plate, cartridge holder, roller block, cap base (printed) | 1 each (+1 roller block if idler) | holder pocket is a placeholder until HP45 is measured |
+| 608 bearings | 2-4 | 2 in side-plate seats (+2 if a printed roller block is used as the idler side) |
+| 8 mm shaft / feed roller (about 20 mm dia, GUESS) | 1 | passes through the plate shaft holes (9 mm) |
+| NEMA17 stepper + driver, GT2 belt (~1 m, buy 1 m), GT2 idler pulley + belt clamps | 1 set | carriage drive; belt length ~2 x 350 mm plus wrap |
+| Feed motor (NEMA17) + driver | 1 | 50.9 steps/mm at 20 mm roller, 16 microsteps (assembly.py); firmware takes steps/mm as a parameter |
+| Linear optical encoder strip + reader | 1 | strip about 300 mm+ (buy 350) for the 290 mm carriage travel |
+| End-stop switches | 2 | not modelled in CAD |
+| Cap gasket (silicone) + wiper blade | 1 set | for cap_base and maintenance FSM |
 | HP 45 (51645A) cartridge | 2+ | spare for bench damage |
-| RP2040/RP2350 MCU board, 12 V MOSFET stage | 1 | PIO for fire timing |
+| RP2040/RP2350 MCU board + 12 V head driver stage (MOSFETs) + level shifting | 1 | driver stage still to be designed after the bench pinout measurement (docs/BENCH.md) |
 | Pi Zero 2 W (CUPS host) | 1 | |
-| PETG/ASA filament, M3 hardware | - | frame split to <=220 mm parts |
+| 12 V PSU, wiring, cartridge contact (pogo) board | 1 | |
+| PETG/ASA filament | - | |
