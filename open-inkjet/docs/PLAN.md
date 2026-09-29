@@ -14,7 +14,7 @@ Open Printer (Open Tools, Paris)
 - [S] Rod vs rail internals of Open Printer were not found in any snippet. Do not assume.
 
 HP 45 / 51645A (chosen printhead)
-- 300 nozzles at 600 dpi spacing, swath 12.7 mm, 12 V, 52 contacts, ~30 ohm heater resistor, ~2 us fire pulse, max ~18 kHz, recommended 300 dpi. [S] https://ytec3d.com/hp45-inkjet-printhead/
+- 300 nozzles at 600 dpi spacing, swath 12.7 mm, 12 V, 52 contacts, max ~18 kHz (heater ~30 ohm and ~2 us pulse: UNVERIFIED, measure), recommended 300 dpi. [S] https://ytec3d.com/hp45-inkjet-printhead/
 - Controllable by fast MCUs with many pins (Arduino Mega/Due class); prior art: MagicPaintBrush (Sprite_tm), Ink Shield, Hackaday cartridge control module. [S] https://hackaday.io/project/176931-hp-printer-cartridge-control-module
 - Still sold new/remanufactured by many vendors (no discontinuation found). [S] https://www.cartridgepros.com/hp-45-hp-51645a-51645a-detail.htm
 - Risk [I]: legacy cartridge, black only, single-nozzle-column pair. Long-term supply depends on remanufacturers; keep a printhead-abstraction layer so HP 302/63 can be added later.
