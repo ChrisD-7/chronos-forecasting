@@ -1,9 +1,18 @@
 # Verification log
 
-## Verified by running (2026-09-29, in the build sandbox)
-- `host/tests`: 8 pytest tests pass (swath 12.7 mm, 300 dpi pitch 0.0847 mm, A4 = 24 swaths, slice round-trip).
-- `firmware/tests/test_sched.c`: passes under -Wall -Wextra -Werror with ASan+UBSan (forward, reverse + bidir offset, missed-column handling).
-- `cad/carriage_plate.py`: builds; solid is valid; volume equals the hand-computed value (6438.1 mm^3); fits 220 mm bed.
+## Verified by running (2026-09-29, build sandbox; `./run_tests.sh`)
+- Host: 26 pytest tests (geometry, slicer nozzle mapping for vdpi 600..50, protocol, sender retransmit/stale-ACK, filter aspect/alpha/16-bit/non-square dpi).
+- Firmware: scheduler and parser tests under -Wall -Wextra -Werror with ASan+UBSan; Python-generated frame stream decoded by the C parser (cross-language check).
+- CAD: carriage plate builds, valid solid, volume equals hand calculation (6438.1 mm^3), fits 220 mm bed.
+
+## Independent review (subagents + /code-review), all findings reproduced before fixing
+- Code review: parser init/reset, halftone speed, alpha, aspect, column-order contract, ACK/retransmit, test vectors. Fixed.
+- Firmware audit (fuzz 3M bytes / 300k frames / 300k scheduler runs clean; mutation check 15/20 caught): fixed dir==0 hang, int32 overflow (now int64), config validation (`oi_sched_start` returns status), and added tests that kill the 5 surviving mutants (re-checked: all killed).
+- Host audit: fixed non-square dpi distortion, nozzle-count divisibility crash, 16-bit greyscale blank, stale-ACK mis-match (replies now echo the frame CRC; START_PASS carries the swath index).
+
+## Known limits (not fixed)
+- Parser is not self-healing mid-frame (0xA5 occurs in payload). Relies on transport timeout + `oi_parser_reset` + per-frame ACK/retransmit; the device-side app layer that sends ACK/NAK and ignores a repeated START_PASS swath index does not exist yet.
+- The filter is not a CUPS filter (no PPD/backend). No motor/feed/encoder-hardware drivers exist; the head backend (`fire_column` for HP45) is not written because pinout/timing are unverified.
 
 ## Sourced but NOT verified (search snippets only; primary pages blocked in the sandbox)
 - HP45: 300 nozzles/600 npi, 12.7 mm swath, 12 V, 52 contacts, 18 kHz max, 300 dpi recommended: confirmed by an independent fact-check via search summaries (ytec3d.com page itself blocked; nozzle count also on the HP store page).

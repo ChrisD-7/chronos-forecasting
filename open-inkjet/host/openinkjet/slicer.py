@@ -4,15 +4,14 @@ Output for each swath is an array (columns, nozzles) of uint8 {0,1}: for carriag
 fires iff bit==1. Row->nozzle mapping at vdpi < nozzle_dpi uses every ratio-th nozzle."""
 import numpy as np
 from .heads import HeadSpec
+from .geometry import nozzle_ratio
 
 
 def slice_page(bitmap: np.ndarray, head: HeadSpec, vdpi: int):
     """bitmap: (rows, cols) array, 1 = ink. Returns list of (columns, nozzles) uint8 arrays."""
     if bitmap.ndim != 2:
         raise ValueError("bitmap must be 2-D")
-    if head.nozzle_dpi % vdpi:
-        raise ValueError("vdpi must divide nozzle_dpi")
-    ratio = head.nozzle_dpi // vdpi
+    ratio = nozzle_ratio(head, vdpi)
     rows_per_swath = head.nozzles // ratio
     rows, cols = bitmap.shape
     n_sw = -(-rows // rows_per_swath)
@@ -28,5 +27,5 @@ def slice_page(bitmap: np.ndarray, head: HeadSpec, vdpi: int):
 
 
 def swath_feed_mm(head: HeadSpec, vdpi: int) -> float:
-    ratio = head.nozzle_dpi // vdpi
+    ratio = nozzle_ratio(head, vdpi)
     return (head.nozzles // ratio) * 25.4 / vdpi

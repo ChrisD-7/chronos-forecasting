@@ -5,8 +5,8 @@ import struct
 SOF = 0xA5
 T_SWATH_HDR = 1   # payload: swath_idx u16, columns u32, bytes_per_col u16, dir i8, feed_um u32
 T_SWATH_DATA = 2  # payload: offset u32, raw bytes (chunk of packed columns)
-T_START_PASS = 3  # payload: empty
-T_ACK, T_NAK = 4, 5
+T_START_PASS = 3  # payload: swath_idx u16 (receiver must ignore a repeated idx: retransmit safe)
+T_ACK, T_NAK = 4, 5   # payload: crc16 u16 LE of the frame being answered
 MAX_PAYLOAD = 1024
 
 
@@ -16,6 +16,10 @@ def crc16(data: bytes, crc: int = 0xFFFF) -> int:
         for _ in range(8):
             crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
     return crc
+
+
+def frame_crc(frame: bytes) -> int:
+    return struct.unpack_from("<H", frame, len(frame) - 2)[0]
 
 
 def encode(ftype: int, payload: bytes = b"") -> bytes:
@@ -59,4 +63,4 @@ def swath_frames(idx: int, cols: bytes, columns: int, bytes_per_col: int, direct
     yield encode(T_SWATH_HDR, struct.pack("<HIHbI", idx, columns, bytes_per_col, direction, feed_um))
     for off in range(0, len(cols), chunk):
         yield encode(T_SWATH_DATA, struct.pack("<I", off) + cols[off:off + chunk])
-    yield encode(T_START_PASS)
+    yield encode(T_START_PASS, struct.pack("<H", idx))

@@ -9,12 +9,20 @@ def dot_pitch_mm(dpi: float) -> float:
     return MM_PER_INCH / dpi
 
 
+def nozzle_ratio(head: HeadSpec, vdpi: int) -> int:
+    """Every ratio-th nozzle prints at vdpi. Validates vdpi so slicer, feed and count agree."""
+    if vdpi <= 0 or head.nozzle_dpi % vdpi:
+        raise ValueError("vdpi must be a positive divisor of nozzle_dpi")
+    ratio = head.nozzle_dpi // vdpi
+    if head.nozzles % ratio:
+        raise ValueError("nozzle count must be divisible by nozzle_dpi/vdpi")
+    return ratio
+
+
 def swath_count(page_len_mm: float, head: HeadSpec, vdpi: int) -> int:
     """Passes needed to cover page_len_mm. At vdpi < nozzle_dpi only every
     (nozzle_dpi/vdpi)-th nozzle is used, so the swath covers nozzles/(ratio) rows."""
-    if head.nozzle_dpi % vdpi:
-        raise ValueError("vdpi must divide nozzle_dpi")
-    rows_per_swath = head.nozzles * vdpi // head.nozzle_dpi
+    rows_per_swath = head.nozzles // nozzle_ratio(head, vdpi)
     rows = math.ceil(page_len_mm / dot_pitch_mm(vdpi))
     return math.ceil(rows / rows_per_swath)
 

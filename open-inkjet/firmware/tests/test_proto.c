@@ -42,6 +42,22 @@ int main(int argc, char **argv) {
     uint8_t big[] = {0xA5, 1, 0x01, 0x08};
     oi_result_t last = OI_NONE; for (int i = 0; i < 4; i++) last = oi_parser_feed(&p, big[i]);
     assert(last == OI_BAD && p.crc_errors == 1);
+    /* flipped-byte frame must be counted as a CRC error */
+    oi_parser_init(&p);
+    for (int i = 0; i < 6; i++) oi_parser_feed(&p, badf[i]);
+    assert(p.crc_errors == 1);
+    /* payload bound: len==1024 accepted, len==1025 rejected without touching payload[] */
+    oi_parser_init(&p);
+    static uint8_t big_frame[6 + 1024]; big_frame[0] = 0xA5; big_frame[1] = 2; big_frame[2] = 0x00; big_frame[3] = 0x04;
+    memset(big_frame + 4, 0x5A, 1024);
+    uint16_t bc = oi_crc16(big_frame + 1, 3 + 1024, 0xFFFF); big_frame[4 + 1024] = bc & 0xFF; big_frame[5 + 1024] = bc >> 8;
+    int accepted = 0;
+    for (int i = 0; i < 6 + 1024; i++) accepted += oi_parser_feed(&p, big_frame[i]) == OI_FRAME;
+    assert(accepted == 1 && p.len == 1024);
+    oi_parser_init(&p);
+    uint8_t over[] = {0xA5, 2, 0x01, 0x04};         /* len = 1025 */
+    oi_result_t r = OI_NONE; for (int i = 0; i < 4; i++) r = oi_parser_feed(&p, over[i]);
+    assert(r == OI_BAD);
     puts("proto tests OK");
     return 0;
 }

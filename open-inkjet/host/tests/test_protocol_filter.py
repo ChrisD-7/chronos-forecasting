@@ -91,15 +91,86 @@ def test_decode_distinguishes_truncated_from_corrupt():
     assert not isinstance(e.value, p.NeedMore)
 
 
+def _ack(frame, kind=None):
+    return (kind or p.T_ACK, struct.pack("<H", p.frame_crc(frame)))
+
+
 def test_sender_retransmits_on_nak_and_timeout_and_gives_up():
     from openinkjet.sender import send_frames, LinkError
-    frames = [p.encode(p.T_START_PASS), p.encode(p.T_START_PASS)]
-    replies = iter([p.T_NAK, None, p.T_ACK, p.T_ACK])
+    f1, f2 = p.encode(p.T_START_PASS, b"\x00\x00"), p.encode(p.T_START_PASS, b"\x01\x00")
+    replies = iter([_ack(f1, p.T_NAK), None, _ack(f1), _ack(f2)])
     sent = []
-    send_frames(frames, sent.append, lambda: next(replies))
-    assert len(sent) == 4
+    send_frames([f1, f2], sent.append, lambda: next(replies))
+    assert sent == [f1, f1, f1, f2]
+    sent.clear()
     with pytest.raises(LinkError):
-        send_frames(frames[:1], lambda b: None, lambda: p.T_NAK, retries=2)
+        send_frames([f1], sent.append, lambda: _ack(f1, p.T_NAK), retries=2)
+    assert len(sent) == 3
+
+
+def test_sender_ignores_stale_ack_for_previous_frame():
+    from openinkjet.sender import send_frames
+    f1, f2 = p.encode(p.T_START_PASS, b"\x00\x00"), p.encode(p.T_START_PASS, b"\x01\x00")
+    # f1 times out, is resent; ACK for f1 arrives twice (original + retransmit); f2 must still wait for its own ACK
+    replies = iter([None, _ack(f1), _ack(f1), None, _ack(f2)])
+    sent = []
+    send_frames([f1, f2], sent.append, lambda: next(replies))
+    assert sent == [f1, f1, f2, f2]
+
+
+def test_start_pass_carries_swath_index():
+    frames = list(p.swath_frames(7, b"\x00" * 38, 1, 38, 1, 12700))
+    t, pl, _ = p.decode(frames[-1])
+    assert t == p.T_START_PASS and struct.unpack("<H", pl)[0] == 7
+
+
+def test_slicer_rejects_nozzle_count_not_divisible_and_zero_dpi():
+    from openinkjet.heads import HP45
+    from openinkjet.slicer import slice_page, swath_feed_mm
+    from openinkjet import geometry as g
+    for bad in (75, 0, -300):
+        with pytest.raises(ValueError):
+            slice_page(np.ones((100, 4), np.uint8), HP45, bad)
+        with pytest.raises(ValueError):
+            g.swath_count(297, HP45, bad)
+        with pytest.raises(ValueError):
+            swath_feed_mm(HP45, bad)
+
+
+def test_nozzle_mapping_uniform_for_all_vdpi():
+    from openinkjet.heads import HP45
+    from openinkjet.slicer import slice_page, swath_feed_mm
+    for vdpi in (600, 300, 200, 150, 100, 60, 50):
+        ratio = 600 // vdpi; rps = 300 // ratio
+        img = np.zeros((rps * 2, 1), np.uint8)
+        for r in range(rps * 2):
+            img[:] = 0; img[r, 0] = 1
+            sw = slice_page(img, HP45, vdpi)
+            n = np.nonzero(sw[r // rps][0])[0]
+            assert list(n) == [(r % rps) * ratio]           # row r -> nozzle (r mod rps)*ratio, in swath r//rps
+        assert swath_feed_mm(HP45, vdpi) == pytest.approx(rps * 25.4 / vdpi)
+
+
+def test_16bit_grey_is_not_blank():
+    from openinkjet.filter import page_bitmap
+    bm = page_bitmap(Image.fromarray(np.full((20, 20), 20000, np.uint16)), 300, 300)
+    assert 0.55 < bm[bm.any(axis=1)][:, bm.any(axis=0)].mean() < 0.85   # ~70% ink inside the image box
+
+
+def test_non_square_dpi_keeps_physical_aspect():
+    from openinkjet.filter import page_bitmap
+    bm = page_bitmap(Image.new("L", (100, 100), 0), 600, 300)
+    ys, xs = np.nonzero(bm)
+    w_mm = (xs.max() - xs.min() + 1) / 600 * 25.4; h_mm = (ys.max() - ys.min() + 1) / 300 * 25.4
+    assert abs(w_mm - h_mm) < 0.5
+
+
+def test_cli_rejects_bad_dpi(capsys):
+    from openinkjet.filter import main
+    with pytest.raises(SystemExit):
+        main(["x.png", "--dpi", "360"])
+    with pytest.raises(SystemExit):
+        main(["x.png", "--dpi", "0"])
 
 
 def test_max_payload_matches_firmware_header():
