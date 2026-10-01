@@ -233,22 +233,76 @@ def test_filter_rasterises_a_multipage_pdf():
     assert _page_ends(two.getvalue()) == 2                                       # copies apply to PDFs too
 
 
-@pytest.mark.skipif(__import__("shutil").which("pdftoppm") is None, reason="needs poppler-utils")
-def test_pdf_hostile_inputs_fail_cleanly_and_fast():
-    import time
-    t0 = time.time()
+needs_poppler = pytest.mark.skipif(__import__("shutil").which("pdftoppm") is None, reason="needs poppler-utils")
+
+
+@needs_poppler
+def test_pdf_garbage_and_encrypted_like_inputs_fail_cleanly():
     assert cups.filter_main(["f", "1", "u", "t", "1", ""], stdin=io.BytesIO(b"%PDF-1.4\n garbage"), stdout=io.BytesIO()) == 1
+
+
+@needs_poppler
+def test_pdf_over_the_page_cap_is_an_error_not_a_silent_truncation(monkeypatch):
+    monkeypatch.setattr(cups, "MAX_PDF_PAGES", 3)
+    ok, over = io.BytesIO(), io.BytesIO()
+    assert cups.filter_main(["f", "1", "u", "t", "1", ""], stdin=io.BytesIO(_pdf_bytes(3)), stdout=ok) == 0
+    assert _page_ends(ok.getvalue()) == 3
+    err = io.StringIO(); old = sys.stderr; sys.stderr = err
+    try:
+        rc = cups.filter_main(["f", "1", "u", "t", "1", ""], stdin=io.BytesIO(_pdf_bytes(4)), stdout=over)
+    finally:
+        sys.stderr = old
+    assert rc == 1 and over.getvalue() == b"" and "limit is 3" in err.getvalue()          # nothing printed, reason given
+
+
+@needs_poppler
+def test_pdf_with_an_oversized_page_is_rejected_not_printed_blank():
     huge = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
-            b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 14400 14400]>>endobj\ntrailer<</Root 1 0 R/Size 4>>\n%%EOF\n")
+            b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 15000 15000]>>endobj\ntrailer<</Root 1 0 R/Size 4>>\n%%EOF\n")
+    out = io.BytesIO(); err = io.StringIO(); old = sys.stderr; sys.stderr = err
+    try:
+        rc = cups.filter_main(["f", "1", "u", "t", "1", ""], stdin=io.BytesIO(huge), stdout=out)
+    finally:
+        sys.stderr = old
+    assert rc == 1 and out.getvalue() == b"" and "rendered as" in err.getvalue()           # poppler writes a 1x1 white page and exits 0: caught
+
+
+@needs_poppler
+def test_pdf_header_may_follow_junk_within_1024_bytes():
     out = io.BytesIO()
-    rc = cups.filter_main(["f", "1", "u", "t", "1", ""], stdin=io.BytesIO(huge), stdout=out)   # 200 x 200 inch page: poppler clamps it
-    assert rc in (0, 1) and len(out.getvalue()) < 10_000_000                                  # either rejected or bounded to one fitted page
-    many = io.BytesIO(); imgs = [Image.new("L", (60, 80), 255) for _ in range(120)]
-    imgs[0].save(many, "PDF", save_all=True, append_images=imgs[1:], resolution=72.0)
-    capped = io.BytesIO()
-    assert cups.filter_main(["f", "1", "u", "t", "1", ""], stdin=io.BytesIO(many.getvalue()), stdout=capped) == 0
-    assert _page_ends(capped.getvalue()) == cups.MAX_PDF_PAGES                                  # 120-page PDF is cut at the page cap
-    assert time.time() - t0 < 120
+    assert cups.filter_main(["f", "1", "u", "t", "1", ""], stdin=io.BytesIO(b"\x00junk\n" * 5 + _pdf_bytes(1)), stdout=out) in (0, 1)
+    assert cups._is_pdf(b"x" * 1000 + b"%PDF-1.7") and not cups._is_pdf(b"x" * 1100 + b"%PDF-1.7") and not cups._is_pdf(b"\x89PNG")
+
+
+@needs_poppler
+def test_sigterm_cleans_up_temp_files_and_kills_pdftoppm(tmp_path):
+    """CUPS cancels a job with SIGTERM: the filter must unwind (remove its temp dir) and pdftoppm must not outlive it."""
+    import signal, subprocess, time
+    big = io.BytesIO(); imgs = [Image.new("L", (1200, 1600), 200) for _ in range(50)]
+    imgs[0].save(big, "PDF", save_all=True, append_images=imgs[1:], resolution=72.0)
+    pdf = tmp_path / "many.pdf"; pdf.write_bytes(big.getvalue())
+    tmp = tmp_path / "tmp"; tmp.mkdir()
+    env = dict(os.environ, TMPDIR=str(tmp), PYTHONPATH=os.path.join(os.path.dirname(__file__), ".."))
+    p_ = subprocess.Popen([sys.executable, "-c", "import sys; from openinkjet.cups import filter_main; sys.exit(filter_main())", "1", "u", "t", "1", "", str(pdf)],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+    for _ in range(100):                                                           # wait until it is really rendering
+        if any(d.name.startswith("oi-pdf-") for d in tmp.iterdir()):
+            break
+        time.sleep(0.1)
+    assert any(d.name.startswith("oi-pdf-") for d in tmp.iterdir())
+    p_.send_signal(signal.SIGTERM)
+    assert p_.wait(timeout=20) != 0
+    time.sleep(0.5)
+    assert [d for d in tmp.iterdir() if d.name.startswith("oi-pdf-")] == []        # temp dir removed
+    leftover = subprocess.run(["pgrep", "-f", str(tmp)], capture_output=True, text=True).stdout.strip()
+    assert leftover == ""                                                          # no pdftoppm still working on our files
+
+
+def test_backend_job_size_cap(monkeypatch):
+    monkeypatch.setattr(cups, "MAX_JOB_BYTES", 100)
+    job = b"".join(p.encode(p.T_START_PASS, struct.pack("<H", k)) for k in range(30))
+    assert len(job) > 100
+    assert cups.backend_main(["o", "1", "u", "t", "1", ""], environ={"DEVICE_URI": "openinkjet:/dev/ttyACM0"}, stdin=io.BytesIO(job)) == cups.CUPS_BACKEND_CANCEL
 
 
 def test_orientation_options_rotate_the_page():

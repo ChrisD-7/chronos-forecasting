@@ -40,6 +40,8 @@ MAX_PDF_PAGES = 50
 PDF_DPI = 300                      # matches the printer's 300 dpi; the page is then fitted to A4 like any image
 PDFTOPPM_TIMEOUT_S = 180
 PDFTOPPM_MEM_BYTES = 2 * 1024 ** 3
+PDF_MAX_PAGE_FILE_BYTES = 256 * 1024 * 1024    # one rendered page PNG may not exceed this (RLIMIT_FSIZE)
+MAX_JOB_BYTES = 300 * 1024 * 1024              # backend: cap on a whole job stream (a 50-page job is about 115 MB)
 
 
 def _orientation_degrees(options: str) -> int:
@@ -57,36 +59,74 @@ def _orientation_degrees(options: str) -> int:
     return 0
 
 
+def _limits():
+    """Child limits for pdftoppm: address space, per-file size, and death with the parent (CUPS cancels a job with SIGTERM)."""
+    import ctypes, resource, signal
+    resource.setrlimit(resource.RLIMIT_AS, (PDFTOPPM_MEM_BYTES, PDFTOPPM_MEM_BYTES))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (PDF_MAX_PAGE_FILE_BYTES, PDF_MAX_PAGE_FILE_BYTES))
+    try:
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)       # PR_SET_PDEATHSIG: never outlive the filter
+    except Exception:
+        pass
+
+
+def _run_poppler(argv, timeout):
+    import subprocess
+    return subprocess.run(argv, capture_output=True, timeout=timeout, preexec_fn=_limits, env={"PATH": "/usr/bin:/bin"})
+
+
+def _pdf_page_count(exe_info, path):
+    """Pages according to pdfinfo, or None if pdfinfo is unavailable or fails."""
+    if not exe_info:
+        return None
+    try:
+        r = _run_poppler([exe_info, path], 30)
+    except Exception:
+        return None
+    m = re.search(rb"^Pages:\s+(\d+)", r.stdout, re.M)
+    return int(m.group(1)) if r.returncode == 0 and m else None
+
+
 def _pdf_pages(data: bytes):
-    """Rasterise a PDF to greyscale page images with pdftoppm (poppler) in a throwaway directory, with a time and memory limit.
-    Yields PIL images; raises RuntimeError on failure."""
-    import resource, shutil, subprocess, tempfile
-    exe = shutil.which("pdftoppm")
+    """Rasterise a PDF to greyscale page images with pdftoppm (poppler), ONE PAGE AT A TIME in a throwaway directory so disk use is bounded
+    by a single page, with time, memory and file-size limits and a sanitised environment. Yields PIL images; raises RuntimeError on any
+    problem: too many pages (never silently truncated), blank/degenerate render, timeout."""
+    import shutil, subprocess, tempfile
+    exe, info = shutil.which("pdftoppm"), shutil.which("pdfinfo")
     if not exe:
         raise RuntimeError("pdftoppm (poppler-utils) is not installed")
     with tempfile.TemporaryDirectory(prefix="oi-pdf-") as d:
         src = os.path.join(d, "in.pdf")
         with open(src, "wb") as fh:
             fh.write(data)
-
-        def limits():
-            resource.setrlimit(resource.RLIMIT_AS, (PDFTOPPM_MEM_BYTES, PDFTOPPM_MEM_BYTES))
-        try:
-            r = subprocess.run([exe, "-r", str(PDF_DPI), "-gray", "-png", "-f", "1", "-l", str(MAX_PDF_PAGES), src, os.path.join(d, "pg")],
-                               capture_output=True, timeout=PDFTOPPM_TIMEOUT_S, preexec_fn=limits, env={"PATH": "/usr/bin:/bin"})
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("pdftoppm timed out after %d s" % PDFTOPPM_TIMEOUT_S)
-        if r.returncode:
-            raise RuntimeError("pdftoppm failed: %s" % r.stderr.decode("latin1", "replace")[:200])
-        pages = sorted(f for f in os.listdir(d) if f.startswith("pg") and f.endswith(".png"))
-        if not pages:
-            raise RuntimeError("PDF has no pages")
-        for name in pages:
-            img = Image.open(os.path.join(d, name))
+        total = _pdf_page_count(info, src)
+        if total is not None and total > MAX_PDF_PAGES:
+            raise RuntimeError("PDF has %d pages; the limit is %d (not truncating silently)" % (total, MAX_PDF_PAGES))
+        n_pages = total if total is not None else MAX_PDF_PAGES
+        for n in range(1, n_pages + 1):
+            out = os.path.join(d, "pg")
+            try:
+                r = _run_poppler([exe, "-r", str(PDF_DPI), "-gray", "-png", "-f", str(n), "-l", str(n), "-singlefile", src, out], PDFTOPPM_TIMEOUT_S)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("pdftoppm timed out after %d s on page %d" % (PDFTOPPM_TIMEOUT_S, n))
+            png = out + ".png"
+            if r.returncode or not os.path.exists(png):
+                if total is None and n > 1:
+                    return                                         # pdfinfo unavailable: ran past the last page
+                raise RuntimeError("pdftoppm failed on page %d: %s" % (n, r.stderr.decode("latin1", "replace")[:200]))
+            img = Image.open(png)
             if img.width * img.height > MAX_IMAGE_PIXELS:
-                raise RuntimeError("PDF page too large")
+                raise RuntimeError("PDF page %d too large (%dx%d px)" % (n, img.width, img.height))
+            if img.width < 16 or img.height < 16:                  # poppler writes a 1x1 page for a bogus/oversized MediaBox and exits 0
+                raise RuntimeError("PDF page %d rendered as %dx%d px (oversized or invalid page size): %s" %
+                                   (n, img.width, img.height, r.stderr.decode("latin1", "replace")[:120]))
             img.load()
+            os.remove(png)
             yield img
+
+
+def _is_pdf(data: bytes) -> bool:
+    return data[:1024].find(b"%PDF-") >= 0                         # the spec allows junk before the header within the first 1024 bytes
 
 
 def filter_main(argv=None, stdin=None, stdout=None):
@@ -100,6 +140,11 @@ def filter_main(argv=None, stdin=None, stdout=None):
         copies = 1
     rotate = _orientation_degrees(argv[5])
     out = stdout or sys.stdout.buffer
+    import signal
+    try:
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))   # CUPS cancels a job with SIGTERM: unwind so temp files go and pdftoppm is killed
+    except ValueError:
+        pass                                                      # not the main thread (tests)
     try:
         if len(argv) == 7:
             with open(argv[6], "rb") as fh:
@@ -109,7 +154,8 @@ def filter_main(argv=None, stdin=None, stdout=None):
         if len(data) > MAX_INPUT_BYTES:
             raise RuntimeError("input larger than %d MB" % (MAX_INPUT_BYTES >> 20))
         frames = []
-        if data[:5] == b"%PDF-":
+        is_pdf = _is_pdf(data)
+        if is_pdf:
             images = _pdf_pages(data)
         else:
             img = Image.open(io.BytesIO(data))                      # lazy: reads the header only
@@ -118,7 +164,7 @@ def filter_main(argv=None, stdin=None, stdout=None):
             img.load()
             images = [img]
         for img in images:
-            if rotate:
+            if rotate and not is_pdf:                            # CUPS (texttopdf/pdftopdf) already applies orientation to documents it turns into PDF
                 img = img.rotate(rotate, expand=True)
             frames.extend(frames_for_image(img))
     except (Image.DecompressionBombError, Image.DecompressionBombWarning, MemoryError) as e:
@@ -176,9 +222,11 @@ def backend_main(argv=None, environ=None, stdin=None):
     try:                                             # validate the job before touching the device
         if len(argv) == 7:
             with open(argv[6], "rb") as fh:
-                data = fh.read()
+                data = fh.read(MAX_JOB_BYTES + 1)
         else:
-            data = (stdin or sys.stdin.buffer).read()
+            data = (stdin or sys.stdin.buffer).read(MAX_JOB_BYTES + 1)
+        if len(data) > MAX_JOB_BYTES:
+            raise ValueError("job larger than %d MB" % (MAX_JOB_BYTES >> 20))
         frames = _frames_from(data)
     except (ValueError, OSError) as e:
         sys.stderr.write("ERROR: unusable job stream, job cancelled: %s\n" % e)

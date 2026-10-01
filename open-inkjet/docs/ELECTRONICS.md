@@ -39,6 +39,10 @@ The netlist is generated from `design.py` (12 V rail, 14 heaters of 30 ohm switc
 | Whole column, capacitor isolated, 18.7 uF | 66.7% | the per-pulse minimum is NOT enough without a supply that recharges |
 | Isolated, 2200 uF, ESR 150 mohm / 50 mohm | above / below 5% | confirms the 107 mohm ESR budget (droop = I x ESR / V) |
 | Whole column, assumed stiff supply (50 mohm, 100 nH, 20 mohm ESR), 470 uF / 1000 uF / 18.7 uF | 1.3% / 1.3% / 3.5% | with a stiff supply the supply carries the load; the result depends entirely on that assumption |
+**Sensitivity (added after review):** the "stiff supply" rows depend on the assumed 50 mohm / 100 nH. Rail droop for a whole column with 18.7 uF / 470 uF:
+loop inductance 10 nH 2.0% / 1.3%; 100 nH 3.5% / 1.3%; 1 uH 5.3% / 1.4%; 5 uH 8.1% / 1.9%. Supply resistance 0.05 ohm 3.5% / 1.3%; 0.5 ohm 7.8% / 3.7%; 2 ohm 20.7% / 4.7%.
+So 18.7 uF stops being enough at about 1 uH of loop or 0.2 ohm of supply resistance, while 470 uF stays at or below 5% up to 5 ohm and 5 uH (all tested). The supply is modelled as a
+resistor with no control-loop dynamics. The simulation fires 22 x 14 = 308 heater pulses (246 uC) while the design arithmetic uses the real 300 nozzles (240 uC): the simulation is 2.7% conservative.
 **Guidance that follows:** size the bulk capacitor for the measured supply impedance with this simulator; 400 uF is the safe bound if you cannot guarantee recharge, and 470 uF or more with an ESR under 107 mohm
 is a sensible starting point. The simulator uses ideal switches: it says nothing about the real driver FETs, gate drive, the address stage, loop inductance beyond the single 100 nH element, or the head itself.
 

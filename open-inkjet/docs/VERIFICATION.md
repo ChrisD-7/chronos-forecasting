@@ -21,13 +21,15 @@
   a missing/unreadable device STOPs the queue (exit 4) instead of retrying every 5 minutes; a failed job sends a RESET frame so the device abandons the half-printed page; images over 40 Mpixel
   are rejected before decoding; `copies` is honoured; the package is copied to the CUPS lib dir so the unprivileged `lp` user can import it. Still open: media size, scaling and resolution options are ignored; JPEG and other image types are not routed directly; raw frames that are well-formed and in range can still drive the printer (no authentication).
 - **CUPS PDF and text jobs (real CUPS 2.4.7):** `lp` of a PDF and of a plain-text file (CUPS converts text to PDF with its own `texttopdf`, then our filter rasterises it with `pdftoppm` at 300 dpi) both printed;
-  the integration run printed 96 swaths = 2 PNG copies + 1 PDF page + 1 text page, no NAKs. Limits: PDF input is capped at 50 pages, 200 MB, 180 s and 2 GB of address space for `pdftoppm`; orientation
-  and copies are honoured, media size / scaling / resolution are ignored (everything is fitted to A4); poppler parsing untrusted PDFs as user `lp` is attack surface this project does not harden further.
+  the integration run printed 96 swaths = 2 PNG copies + 1 PDF page + 1 text page, no NAKs. Limits (found by review, fixed, tested): PDFs are rendered one page at a time (disk bounded by one page, 256 MB per page file), more than 50 pages is an ERROR (never a silent truncation), a page that renders as
+  1x1 px (poppler's answer to an oversized MediaBox, exit code 0) is rejected, 180 s / 2 GB address space per page, sanitised environment, `pdftoppm` dies with the filter (PR_SET_PDEATHSIG) and a SIGTERM
+  from CUPS removes the temp dir (tested with a real SIGTERM), PDF header accepted within the first 1024 bytes, backend job cap 300 MB. Orientation rotates images only (CUPS applies it to documents it converts to PDF);
+  media size, scaling and resolution are ignored and landscape pages are shrunk, not rotated; poppler parsing untrusted PDFs as user `lp` remains attack surface this project does not harden further.
 - **Performance bugs found while testing (fixed):** the CRC-16 was a bitwise Python loop (about 2 s per page of frame data; now `binascii.crc_hqx`, bit-identical to the reference and tested), and
   `protocol.decode(data[off:])` copied the rest of the stream per frame (quadratic: a 50-page job is over 100 MB, which would have hung the root backend; `decode` now takes an offset, tested linear).
-- **Circuit simulation (ngspice 42, `electronics/spice_sim.py`, 4 tests):** under the ASSUMED head parameters, an isolated 18.7 uF capacitor droops 4.9% on one worst-case pulse (formula: 5%), 400 uF holds a
+- **Circuit simulation (ngspice 42, `electronics/spice_sim.py`, 7 tests; reviewed: time step converged, hand ODE reproduces 3.5%/1.3%, model mutations move the right way):** under the ASSUMED head parameters, an isolated 18.7 uF capacitor droops 4.9% on one worst-case pulse (formula: 5%), 400 uF holds a
   whole fully inked column to 5.0% with no supply recharge, 18.7 uF over a column collapses (66.7% droop), the ESR budget is confirmed (150 mohm over budget, 50 mohm under, droop = I x ESR / V), and with a
-  stiff assumed supply (50 mohm, 100 nH, 20 mohm ESR) even 18.7 uF droops only 3.5% because the supply recharges it. Switches are ideal (Ron 0.05 ohm); the real driver FETs, the address stage and head thermal
+  stiff assumed supply (50 mohm, 100 nH, 20 mohm ESR) even 18.7 uF droops only 3.5% because the supply recharges it. That result is FRAGILE: 18.7 uF fails at about 1 uH or 0.2 ohm, 470 uF holds to 5 uH / 5 ohm (tested; see docs/ELECTRONICS.md). Switches are ideal (Ron 0.05 ohm); the real driver FETs, the address stage and head thermal
   behaviour are not modelled, and the 30 ohm / 2 us head values are still UNVERIFIED.
 - **CAD (58 tests total, incl. a full 3D assembly):** 17 parts placed in machine coordinates with a pairwise boolean interference check at five carriage positions (including over the
   platen posts), measured minimum clearances at seven positions (riser/plate to extrusion >= 3 mm, holder to paper plane >= 1 mm, carriage past every post), plus deliberate-defect tests proving the checks can fail.
@@ -40,7 +42,7 @@
   mid-pass, ramp must fit BOTH run-in distances (lead and tail, including the exact boundary), missed columns and stalled/backwards encoder reported to the
   host (`T_ERROR`) instead of silently dropped, positioning move before a pass when column counts differ, aborted job capped after `page_timeout_ms`,
   speed clamp, paper-step accounting, config/int32-range errors, FAULT recovery.
-- **Host, 71 pytest tests:** geometry, slicer nozzle mapping (vdpi 600..50), protocol/CRC, sender (retransmit, BUSY wait, stale ACK, bounded drain),
+- **Host, 76 pytest tests:** geometry, slicer nozzle mapping (vdpi 600..50), protocol/CRC, sender (retransmit, BUSY wait, stale ACK, bounded drain),
   serial link (EOF, write timeout, resync speed), filter (aspect, margins, alpha, 16-bit, non-square dpi), CUPS filter/backend logic and exit codes,
   PPD structure and mime types, and end-to-end tests.
 - **Firmware, C99 with -Wall -Wextra -Werror and ASan+UBSan:** scheduler, parser, job controller, matrix head, motion, feed, maintenance FSM (unit tests);

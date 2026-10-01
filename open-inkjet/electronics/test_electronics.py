@@ -182,3 +182,30 @@ def test_spice_with_a_stiff_supply_a_modest_capacitor_holds_the_rail():
         r = sim.run(c, n_pulses=d.N_ADDR, **sim.REALISTIC)
         assert r["droop_fraction"] < d.DROOP_MAX
     assert sim.run(d.bulk_capacitance_f(), n_pulses=d.N_ADDR, **sim.REALISTIC)["supply_peak_a"] > 1.0   # the supply, not the cap, then carries the load
+
+
+@needs_ngspice
+def test_spice_numbers_quoted_in_the_docs():
+    small = sim.run(d.bulk_capacitance_f(), n_pulses=d.N_ADDR, **sim.REALISTIC)["droop_fraction"]
+    big = sim.run(470e-6, n_pulses=d.N_ADDR, **sim.REALISTIC)["droop_fraction"]
+    assert 0.030 < small < 0.040 and big < small and 0.010 < big < 0.016           # docs: 3.5% and 1.3% (stiff supply assumption)
+    at_budget = sim.run(2200e-6, esr=d.esr_budget_ohm(), **sim.ISOLATED)["droop_fraction"]
+    assert at_budget == pytest.approx(0.048, abs=0.006)                           # right at the 107 mohm budget: just under 5%
+
+
+@needs_ngspice
+def test_spice_conclusions_are_fragile_to_loop_inductance_and_supply_resistance():
+    """Review finding: '18.7 uF is enough with a stiff supply' only holds for low inductance / resistance; 470 uF is robust."""
+    small_l = lambda l: sim.run(d.bulk_capacitance_f(), n_pulses=d.N_ADDR, esr=0.02, r_supply=0.05, l_loop=l)["droop_fraction"]
+    small_r = lambda r: sim.run(d.bulk_capacitance_f(), n_pulses=d.N_ADDR, esr=0.02, r_supply=r, l_loop=100e-9)["droop_fraction"]
+    assert small_l(10e-9) < small_l(100e-9) < d.DROOP_MAX < small_l(1e-6)         # 1 uH of loop already breaks the 5% target
+    assert small_r(0.05) < d.DROOP_MAX < small_r(0.5)                              # so does 0.5 ohm of supply resistance
+    worst = sim.run(470e-6, n_pulses=d.N_ADDR, esr=0.02, r_supply=5.0, l_loop=5e-6)["droop_fraction"]
+    assert worst <= d.DROOP_MAX                                                    # 470 uF stays within 5% even for 5 ohm and 5 uH
+
+
+@needs_ngspice
+def test_spice_load_really_switches():
+    """The stiff-supply tests could pass vacuously if nothing switched on: the supply must carry the pulses and the rail must dip."""
+    r = sim.run(470e-6, n_pulses=d.N_ADDR, **sim.REALISTIC)
+    assert r["supply_peak_a"] > 1.0 and r["vmin"] < d.V_HEAD - 0.05
