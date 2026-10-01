@@ -68,7 +68,7 @@ static bool car_tick(struct repeating_timer *t) {
     }
     if (sps < CAR_START_SPS) sps = CAR_START_SPS;         /* never step slower than the start speed while moving */
     car_sps = sps;
-    car_period_us = 1000000u / sps;
+    car_period_us = (1000000u + sps - 1u) / sps;        /* ceil: the real rate never exceeds the target */
     gpio_put(PIN_CAR_STEP, 1); busy_wait_us_32(OI_STEP_PULSE_US); gpio_put(PIN_CAR_STEP, 0);
     t->delay_us = -(int64_t)car_period_us;               /* next step one period after this one */
     return true;
@@ -108,21 +108,43 @@ static void hal_carriage_drive(void *c, int dir, uint32_t speed_counts_s) {
 }
 static void hal_wait_encoder_change(void *c) { (void)c; busy_wait_us_32(20); }
 
-/* Drive left at a slow speed until the home switch closes (active low, pull-up; polarity UNVERIFIED), zero the encoder there.
- * Returns 0 on success, -1 if the switch is not reached within OI_HOME_TIMEOUT_MS or the carriage cannot be started. */
+/* Homing: always approach the left switch from the right. Active-low switch with pull-up (polarity UNVERIFIED).
+ *  1. if the switch is already closed, back off to the right until it opens (a zero taken anywhere inside the actuation range would differ);
+ *  2. drive left; if the encoder has not moved left after OI_HOME_DIR_CHECK_MS the direction or encoder is wrong: abort (never run 8 s into a stop);
+ *  3. record the encoder value at the moment the switch closes, brake, then re-zero relative to that value, so zero = switch edge, not the
+ *     braking overshoot. The carriage ends up a few counts left of zero; left_stop_counts must leave room for that (checked in oi_app.c).
+ * Returns 0 on success, -1 on any timeout, wrong direction, stuck switch or start failure (the carriage is stopped in every case). */
 static int hal_home(void *c) {
     (void)c;
-    if (gpio_get(PIN_HOME_LEFT)) {                        /* not already on the switch */
-        hal_carriage_drive(0, -1, OI_HOME_SPEED_COUNTS_S);
+    if (!gpio_get(PIN_HOME_LEFT)) {                       /* on the switch: back off to the right */
+        hal_carriage_drive(0, +1, OI_HOME_SPEED_COUNTS_S);
         if (!car_running) return -1;
         absolute_time_t until = make_timeout_time_ms(OI_HOME_TIMEOUT_MS);
-        while (gpio_get(PIN_HOME_LEFT)) {
-            if (time_reached(until)) { hal_carriage_drive(0, 0, 0); return -1; }
+        while (!gpio_get(PIN_HOME_LEFT)) {
+            if (time_reached(until)) { hal_carriage_drive(0, 0, 0); return -1; }      /* stuck closed or wrong direction */
             busy_wait_us_32(50);
         }
         hal_carriage_drive(0, 0, 0);
     }
-    enc_count = 0;                                        /* encoder zero = home switch position (decel overrun is behind the switch) */
+    int32_t start = enc_count;
+    hal_carriage_drive(0, -1, OI_HOME_SPEED_COUNTS_S);
+    if (!car_running) return -1;
+    absolute_time_t until = make_timeout_time_ms(OI_HOME_TIMEOUT_MS), check = make_timeout_time_ms(OI_HOME_DIR_CHECK_MS);
+    bool moved = false;
+    while (gpio_get(PIN_HOME_LEFT)) {
+        if (!moved && time_reached(check)) {
+            if (enc_count >= start - 2) { hal_carriage_drive(0, 0, 0); return -1; }   /* not moving left: DIR or encoder wrong */
+            moved = true;
+        }
+        if (time_reached(until)) { hal_carriage_drive(0, 0, 0); return -1; }
+        busy_wait_us_32(50);
+    }
+    int32_t at_close = enc_count;                         /* encoder value when the switch closed (aligned 32-bit read) */
+    hal_carriage_drive(0, 0, 0);
+    if (gpio_get(PIN_HOME_LEFT)) return -1;               /* switch reads open after braking: bounce or wiring fault, do not trust the zero */
+    uint32_t irq = save_and_disable_interrupts();
+    enc_count -= at_close;                                /* zero = switch edge */
+    restore_interrupts(irq);
     return 0;
 }
 

@@ -128,6 +128,18 @@ static void test_ramp_must_fit_both_run_ins(void) {
     c = base_cfg(); c.origin_counts = 2100; c.margin_counts = 100; c.accel = 20000;   /* fits the lead but not the tail */
     setup(&c, &head8); send_swath(0, 10, +1);
     assert(app.passes == 0 && W.err_codes[0] == OI_DEVERR_RAMP);
+    c = base_cfg(); c.bidir_offset_counts = 100;                                      /* offset eats 100 of the 200 lead: 100 < ramp 135 */
+    setup(&c, &head8); send_swath(0, 10, +1);
+    assert(app.passes == 0 && W.err_codes[0] == OI_DEVERR_RAMP);
+    c = base_cfg(); c.bidir_offset_counts = -100; c.margin_counts = 200;             /* negative offset eats the tail: 200 - 100 < 135 */
+    setup(&c, &head8); send_swath(0, 10, +1);
+    assert(app.passes == 0 && W.err_codes[0] == OI_DEVERR_RAMP);
+    c = base_cfg(); c.origin_counts = 1000; c.margin_counts = 200; c.bidir_offset_counts = 100;   /* lead 900 is plenty; ONLY the tail (200 - 100) is short */
+    setup(&c, &head8); send_swath(0, 10, +1);
+    assert(app.passes == 0 && W.err_codes[0] == OI_DEVERR_RAMP);
+    c = base_cfg(); c.bidir_offset_counts = 60;                                       /* 140 >= 135 on both sides: fits */
+    setup(&c, &head8); send_swath(0, 10, +1);
+    assert(app.passes == 1 && app.pass_errors == 0);
     c = base_cfg(); c.origin_counts = 810; c.margin_counts = 810; c.accel = 50000;    /* exactly fits both (ramp 810) */
     setup(&c, &head8); send_swath(0, 10, +1);
     assert(app.passes == 1 && app.pass_errors == 0);
@@ -203,7 +215,7 @@ static void test_braking_starts_at_last_column_not_at_run_out_end(void) {
 
 static void test_homing_once_and_failure_blocks_printing(void) {
     static oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply, h_home };
-    oi_app_cfg_t c = base_cfg();
+    oi_app_cfg_t c = base_cfg(); c.left_stop_counts = 40;                    /* room to brake a vmax/2 positioning move (34 counts) before the switch */
     memset(&W, 0, sizeof W); W.step_per_wait = 1; W.pos = 777;               /* power-up position is arbitrary */
     assert(oi_app_init(&app, &hal, &c, &head8, swbuf, sizeof swbuf) == 0);
     send_swath(0, 10, +1); send_swath(1, 10, -1); send_page_end();
@@ -215,6 +227,20 @@ static void test_homing_once_and_failure_blocks_printing(void) {
     assert(W.err_codes[0] == OI_DEVERR_HOME && app.passes == 0 && W.fires == 0 && !app.homed);
     W.home_result = 0; send_swath(0, 10, +1);                                 /* retry after the fault is cleared */
     assert(app.homed && W.fires == 10);
+}
+
+static void test_left_stop_must_leave_room_to_brake_before_the_home_switch(void) {
+    static oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply, h_home };
+    oi_app_cfg_t c = base_cfg(); c.left_stop_counts = 20;                    /* positioning ramp at vmax/2 is 34 counts > 20 */
+    memset(&W, 0, sizeof W); W.step_per_wait = 1;
+    assert(oi_app_init(&app, &hal, &c, &head8, swbuf, sizeof swbuf) == 0);
+    send_swath(0, 10, +1);
+    assert(W.err_codes[0] == OI_DEVERR_RAMP && app.passes == 0 && W.fires == 0);
+    c.left_stop_counts = 34;                                                 /* exactly enough */
+    memset(&W, 0, sizeof W); W.step_per_wait = 1;
+    assert(oi_app_init(&app, &hal, &c, &head8, swbuf, sizeof swbuf) == 0);
+    send_swath(0, 10, +1);
+    assert(app.passes == 1 && app.pass_errors == 0);
 }
 
 static void test_speed_clamped_to_head_limit(void) {
@@ -250,6 +276,7 @@ int main(void) {
     test_speed_clamped_to_head_limit(); test_paper_accounting(); test_config_and_range_errors();
     test_fault_is_reported_and_recovers(); test_split_feed_service_answers_busy_while_pass_pending();
     test_braking_starts_at_last_column_not_at_run_out_end(); test_homing_once_and_failure_blocks_printing();
+    test_left_stop_must_leave_room_to_brake_before_the_home_switch();
     puts("app tests OK");
     return 0;
 }

@@ -85,13 +85,21 @@ static void run_pass(oi_app_t *a) {
     oi_traj_t t;
     uint32_t dist = (uint32_t)((int64_t)x1 > x0 ? (int64_t)x1 - x0 : (int64_t)x0 - x1);   /* <= 2^32-1, exact in uint32 */
     /* The ramp must fit in BOTH real run-in distances: origin - left_stop (before column 0) and margin (after the last column). */
-    int64_t run_lead = (int64_t)a->cfg.origin_counts - a->cfg.left_stop_counts;
-    int64_t run_tail = a->cfg.margin_counts;
+    int64_t bidir = a->cfg.bidir_offset_counts < 0 ? -(int64_t)a->cfg.bidir_offset_counts : a->cfg.bidir_offset_counts;
+    int64_t run_lead = (int64_t)a->cfg.origin_counts - a->cfg.left_stop_counts - bidir;   /* the offset eats room on one side or the other */
+    int64_t run_tail = (int64_t)a->cfg.margin_counts - bidir;
     if (oi_traj_plan(&t, dist, vmax, a->cfg.accel) || (int64_t)t.accel_counts > run_lead || (int64_t)t.accel_counts > run_tail) {
         send_error(a, OI_DEVERR_RAMP);
         return;
     }
 
+    if (a->hal.home) {                                                /* a real machine with a hard stop at the home switch */
+        oi_traj_t tp;                                                 /* positioning moves run at vmax/2 and coast this far past x0 */
+        if (oi_traj_plan(&tp, dist, vmax / 2 ? vmax / 2 : 1, a->cfg.accel) || (int64_t)tp.accel_counts > (int64_t)a->cfg.left_stop_counts) {
+            send_error(a, OI_DEVERR_RAMP);                            /* left_stop must leave room to brake before the switch */
+            return;
+        }
+    }
     a->sched.head = a->head; a->sched.columns = j->buf; a->sched.n_columns = j->columns;
     a->sched.bytes_per_col = j->bytes_per_col; a->sched.counts_per_dot = a->cfg.counts_per_dot;
     a->sched.origin_counts = a->cfg.origin_counts; a->sched.bidir_offset_counts = a->cfg.bidir_offset_counts;

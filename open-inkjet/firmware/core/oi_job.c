@@ -92,4 +92,8 @@ int oi_job_take_pass(oi_job_t *j) {
     return r;
 }
 void oi_job_pass_done(oi_job_t *j) { j->busy = 0; }
-int oi_job_take_page_end(oi_job_t *j) { int r = j->page_end; j->page_end = 0; return r; }
+int oi_job_take_page_end(oi_job_t *j) {
+    int r = j->page_end;
+    if (r) j->page_end = 0;      /* clear ONLY if we saw it: an unconditional clear can overwrite a flag the RX context just set */
+    return r;
+}

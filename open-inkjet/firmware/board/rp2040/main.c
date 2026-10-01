@@ -30,7 +30,7 @@ int main(void) {
     oi_head_t *head = oi_board_head(&armed);
     oi_app_cfg_t cfg = {
         .counts_per_dot = OI_COUNTS_PER_DOT, .origin_counts = 400, .bidir_offset_counts = 0,      /* GUESS: calibrate per docs/BENCH.md */
-        .left_stop_counts = 0, .margin_counts = 400, .v_max = OI_CAR_VMAX_COUNTS_S, .accel = OI_CAR_ACCEL_COUNTS_S2,
+        .left_stop_counts = OI_LEFT_STOP_COUNTS, .margin_counts = 400, .v_max = OI_CAR_VMAX_COUNTS_S, .accel = OI_CAR_ACCEL_COUNTS_S2,
         .max_fire_hz = 18000, .steps_per_mm_x1000 = OI_FEED_STEPS_PER_MM_X1000,
         .idle_cap_ms = 2000, .wipe_every_pages = 1, .spit_droplets = 5,
         .stall_ticks = OI_STALL_POLLS, .page_timeout_ms = 10000 };

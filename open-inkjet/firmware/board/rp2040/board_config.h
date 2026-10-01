@@ -46,6 +46,8 @@
 #define OI_STOP_TIMEOUT_MS 2000u         /* hal_carriage_drive(0) gives up waiting for the ramp-down and forces the motor idle */
 #define OI_HOME_SPEED_COUNTS_S 1500u     /* homing speed toward the left switch (GUESS) */
 #define OI_HOME_TIMEOUT_MS 8000u         /* homing fails if the switch is not reached in this time */
+#define OI_HOME_DIR_CHECK_MS 200u        /* encoder must have moved left by then or homing aborts (wrong DIR / dead encoder) */
+#define OI_LEFT_STOP_COUNTS 150          /* carriage park position after homing: must exceed the braking overshoot (checked in oi_app.c) */
 
 /* --- actuators (GUESS) --- */
 #define OI_SERVO_CAP_CLOSED_US 1000
