@@ -163,8 +163,8 @@ def test_carriage_bracket_reaches_paper_with_correct_gap():
     assert {(h[0], 0.0) for h in shelf_holes} == hold                               # x positions match; y is the shelf centre
 
 
-def test_platen_halves_cover_a4_and_fit_bed():
-    assert 2 * PLATEN_HALF["l"] >= PAGE_W + 2 * PAGE_MARGIN and PLATEN_HALF["l"] <= BED_MM
+def test_platen_halves_span_the_frame_and_fit_bed():
+    assert 2 * PLATEN_HALF["l"] >= PLATE_INNER_SPACING and PLATEN_HALF["l"] <= BED_MM and 2 * PLATEN_HALF["l"] >= PAGE_W + 2 * PAGE_MARGIN
 
 
 def test_stack_checks():
@@ -174,3 +174,75 @@ def test_stack_checks():
     assert c["holder_inside_shelf"] and c["cartridge_supported"]                       # holder footprint on the shelf; cartridge over roller+platen, clear of the lip
     assert c["nozzle_gap_mm"] == pytest.approx(NOZZLE_GAP)
     assert c["stack_paper_top"] == -10.0 and c["stack_block_top"] == pytest.approx(70.0)
+
+
+def _machine_x_holes(part_name, centre_x):
+    return sorted(round(h[0] + centre_x, 3) for h in cyl_holes(PARTS[part_name]()) if h[2] == pytest.approx(1.7))
+
+
+def test_platen_holes_land_on_the_post_feet():
+    left = _machine_x_holes("platen_half", -PLATEN_HALF["l"] / 2)
+    right = _machine_x_holes("platen_half_right", +PLATEN_HALF["l"] / 2)
+    assert left == [-130.0, -5.0] and right == [5.0, 130.0]                   # outer posts at +-130, joint post (feet holes at +-5) at 0
+    joint = sorted(round(h[0] + POST_X[1], 3) for h in cyl_holes(PARTS["platen_post_joint"]()) if h[2] == pytest.approx(1.7))
+    assert joint == [-5.0, 5.0]
+    outer = [round(h[0], 3) for h in cyl_holes(PARTS["platen_post_outer"]()) if h[2] == pytest.approx(1.7)]
+    assert outer == [0.0]                                                      # centred on the post (posts at -130 and 130)
+
+
+def test_post_geometry_matches_the_stack():
+    pl = assembly.post_layout()
+    bb = PARTS["platen_post_outer"]().val().BoundingBox()
+    assert bb.zmax == pytest.approx(0.0) and bb.zmin == pytest.approx(pl["foot_bottom"] - pl["ext_bottom"])    # flange top at the extrusion bottom, foot under the platen
+    c = assembly.checks()
+    assert c["post_clears_carriage_mm"] >= 3.0 and c["post_foot_clear_of_roller_mm"] >= 1.0 and c["platen_spans_plates"]
+    m5 = [h for h in cyl_holes(PARTS["platen_post_outer"]()) if h[2] == pytest.approx(M5_HOLE_D / 2)]
+    assert len(m5) == 1 and (m5[0][0], m5[0][1]) == (0.0, 0.0)                 # M5 over the T-slot centre
+
+
+def test_motor_mount_bolts_match_the_side_plate_pattern():
+    mount = {(h[0], h[1]) for h in cyl_holes(PARTS["motor_mount"]()) if h[2] == pytest.approx(1.7)}
+    plate = {(h[0], h[1] + 20.0) for h in cyl_holes(PARTS["side_plate"]()) if h[2] == pytest.approx(1.7) and abs(h[1] + 20.0) > 5}
+    corners = {(sx * MOTOR_BOLT_SQUARE, sy * MOTOR_BOLT_SQUARE) for sx in (-1, 1) for sy in (-1, 1)}
+    assert corners <= mount and corners <= plate                               # same square on both parts, relative to the roller axis
+
+
+def test_sensor_and_encoder_brackets_have_a_slot_bolt():
+    for name in ("sensor_mount", "encoder_bracket"):
+        m5 = [h for h in cyl_holes(PARTS[name]()) if h[2] == pytest.approx(M5_HOLE_D / 2)]
+        assert len(m5) == 1, name
+
+
+# ---- full 3D assembly: pairwise boolean interference ----
+import assembly_model as am
+
+
+@pytest.mark.parametrize("cx", [-139.0, -130.0, 0.0, 130.0, 139.0])
+def test_assembly_has_no_interference_at_carriage_positions(cx):
+    shapes = am.build(cx)
+    assert len(shapes) == 16 and all(s.isValid() for s in shapes.values())
+    assert am.interferences(shapes) == []
+
+
+def test_assembly_check_detects_real_interference():
+    shapes = am.build(0.0)
+    c = shapes["cartridge"].translate(cq.Vector(0, 0, 10.0))                   # cartridge pushed 10 mm up into the holder/shelf
+    shapes["cartridge"] = c
+    assert any("cartridge" in (a, b) for a, b, v in am.interferences(shapes))
+    shapes = am.build(0.0)
+    shapes["bracket"] = shapes["bracket"].translate(cq.Vector(0, 0, -12.0))    # bracket dropped onto the extrusion
+    assert any("bracket" in (a, b) and "ext_rear" in (a, b) for a, b, v in am.interferences(shapes))
+    shapes = am.build(0.0)
+    shapes["post_1"] = shapes["post_1"].translate(cq.Vector(0, -12.0, 0))      # a post stem moved into the carriage riser region
+    assert any("post_1" in (a, b) for a, b, v in am.interferences(shapes))
+
+
+def test_assembly_contacts_are_real_touches_not_gaps():
+    """Parts that must touch do (their boxes meet): plate/extrusion ends, post flange/extrusion bottom, post foot/platen underside."""
+    s = am.build(0.0)
+    assert s["ext_rear"].BoundingBox().xmax == pytest.approx(s["plate_right"].BoundingBox().xmin)
+    assert s["post_1"].BoundingBox().zmax == pytest.approx(s["ext_rear"].BoundingBox().zmin)
+    assert s["platen_left"].BoundingBox().zmin == pytest.approx(-16.0)
+    assert s["post_0"].BoundingBox().zmin == pytest.approx(s["platen_left"].BoundingBox().zmin - POST_FOOT_T)
+    nozzle_gap = s["cartridge"].BoundingBox().zmin - (-10.0)
+    assert nozzle_gap == pytest.approx(NOZZLE_GAP)                             # cartridge underside NOZZLE_GAP above the paper plane

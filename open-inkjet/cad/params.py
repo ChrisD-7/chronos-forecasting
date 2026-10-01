@@ -44,7 +44,7 @@ NOZZLE_GAP = 1.5           # GUESS: printhead to paper distance
 SHELF_T = 4.0
 RISER_T = 4.0
 SHELF_LEN = 55.0           # shelf depth beyond the top plate; must hold the 51 mm holder footprint
-PLATEN_HALF = dict(l=110.0, w=55.0, t=6.0)     # two halves make 220 mm (A4 is 210); each fits the 220 mm bed
+PLATEN_HALF = dict(l=175.0, w=46.0, t=6.0)     # two halves span the 350 mm between the side plates; each fits the 220 mm bed
 PLATEN_LIP = 2.0           # paper-guide lip height
 # NEMA 17 flange (SOURCED via search: 42.3 mm face, 31 mm hole spacing, 22 mm pilot, M3 holes: MOONS', RepRap wiki, jlcmc)
 NEMA17 = dict(face=42.3, hole_pitch=31.0, pilot=22.0, hole_d=3.4)
@@ -56,3 +56,13 @@ HOLDER_RIM_T = 1.0         # floor rim that the cartridge rests on; the nozzle w
 HOLDER_RIM_W = 2.0         # rim width around the nozzle window
 HOLDER_WALL = 3.0
 PILOT_CLEAR = 1.0          # extra diameter on the motor pilot bore (FDM tolerance; was 0.5, too tight)
+
+# platen support posts: hang from the rear extrusion's bottom face, in front of nothing the carriage touches (see assembly.post_layout())
+POST_FLANGE_T = 4.0
+POST_STEM_Y = 6.0          # stem thickness in Y, flush with the extrusion's front face
+POST_FOOT_T = 6.0
+POST_X = (-130.0, 0.0, 130.0)   # 0.0 = the joint between the two platen halves (a post foot straddles it)
+POST_W = 20.0
+# motor mount to side plate: M3 square around the roller axis (GUESS; both parts use it)
+MOTOR_BOLT_SQUARE = 21.0
+M5_HOLE_D = 5.5

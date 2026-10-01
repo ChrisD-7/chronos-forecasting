@@ -59,6 +59,18 @@ def bracket_layout():
                 lip_y=(platen_y0 + PLATEN_HALF["w"] - 2.0, platen_y0 + PLATEN_HALF["w"]))
 
 
+def post_layout():
+    """Platen support posts: stem Y range (machine) and heights, compared with everything the carriage drags through that region."""
+    ly = bracket_layout(); st = stack()
+    ext_bottom = EXT_HOLES[0][1] - EXT_SIZE / 2
+    platen_bottom = st["paper_top"] - PLATEN_HALF["t"]
+    stem_y = (ly["ext_front"], ly["ext_front"] + POST_STEM_Y)
+    return dict(ext_bottom=ext_bottom, platen_bottom=platen_bottom, foot_bottom=platen_bottom - POST_FOOT_T,
+                stem_y=stem_y, stem_len=ext_bottom - POST_FLANGE_T - (platen_bottom - POST_FOOT_T),
+                clear_to_carriage=stem_y[0] - ly["front_plate"],               # riser / shelf end at the plate's front edge
+                foot_y=(ly["platen_y"][0], ly["platen_y"][1]))
+
+
 def checks():
     out = {}
     out["required_stroke_mm"] = required_stroke()
@@ -77,6 +89,11 @@ def checks():
     out["holder_inside_shelf"] = ly["shelf_front"] <= ly["holder_y"][0] and ly["holder_y"][1] <= ly["front_plate"]
     out["cartridge_supported"] = ly["roller_y"][0] <= ly["cartridge_y"][0] and ly["cartridge_y"][1] <= ly["lip_y"][0] - 3.0
     out["cartridge_over_roller_mm"] = max(0.0, ly["roller_y"][1] - ly["cartridge_y"][0])
+    pl = post_layout()
+    out["post_clears_carriage_mm"] = pl["clear_to_carriage"]
+    out["post_foot_clear_of_roller_mm"] = pl["foot_y"][0] - ly["roller_y"][1]
+    out["platen_spans_plates"] = 2 * PLATEN_HALF["l"] >= PLATE_INNER_SPACING - 1e-9
+    out["post_stem_len_mm"] = pl["stem_len"]
     out["nozzle_gap_mm"] = st["nozzle_z"] - st["paper_top"]
     return out
 

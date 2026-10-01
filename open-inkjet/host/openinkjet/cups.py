@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2026 open-inkjet contributors
 # SPDX-License-Identifier: GPL-3.0-only
-"""CUPS entry points. UNTESTED against a real CUPS install (none in the build sandbox); exit codes checked
-against OpenPrinting/cups backend.h; argument conventions follow the CUPS filter/backend contract:
+"""CUPS entry points. Tested end to end against CUPS 2.4.7 for direct PNG/PBM jobs (host/tests/cups_integration.py: lp -> cupsd ->
+filter -> backend -> pty -> firmware simulator -> page bitmap), PPD checked with cupstestppd; exit codes checked against
+OpenPrinting/cups backend.h; argument conventions follow the CUPS filter/backend contract:
 argv = job user title copies options [file].
 - filter_main():  image (file or stdin) -> protocol frames on stdout.
 - backend_main(): frames (file or stdin) -> device named by DEVICE_URI 'openinkjet:/dev/ttyACM0'.

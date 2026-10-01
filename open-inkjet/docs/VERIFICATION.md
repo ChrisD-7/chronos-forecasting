@@ -13,7 +13,12 @@
 - **Electronics (`electronics/`, 23 tests):** budget arithmetic checked by hand and by an independent reviewer; Pico SDK SPI baud algorithm reproduced (and the 25 MHz assumption
   corrected); block netlist with pin kinds and 13 injected defects all caught; simulated 74HC595 chain proves the firmware bit order reaches the intended head lines; `board_config.h`
   pins equal the netlist. This is a consistency model, not a circuit.
-- **CAD additions (33 tests total):** carriage bracket (riser + shelf, height derived from the roller and rail stack), full-height cartridge holder with nozzle window and floor rim,
+- **CUPS (real CUPS 2.4.7, `host/tests/cups_integration.py`, run with `./run_tests.sh --cups` as root):** `cupstestppd` on the PPD = PASS; a PNG submitted with `lp` went through
+  cupsd, `oi_filter` and the `openinkjet` backend over a pty into the C firmware simulator and the printed page equalled the expected bitmap (24 swaths, no NAKs). Covers the direct
+  image route only.
+- **CAD (50 tests total, incl. a full 3D assembly):** 16 parts placed in machine coordinates with a pairwise boolean interference check at five carriage positions (including over the
+  platen posts), plus deliberate-defect tests proving the check can fail. Dimensions are still GUESS values, so this shows the parts are consistent with each other, not that they fit real components.
+- **(earlier) CAD additions (33 tests total):** carriage bracket (riser + shelf, height derived from the roller and rail stack), full-height cartridge holder with nozzle window and floor rim,
   platen halves, motor mount matching the NEMA 17 flange (sourced dims), sensor and encoder brackets; coordinates, edge distances, single-solid checks and a boolean check that the
   placeholder cartridge fits the holder without interference. The vertical stack and Y layout are arithmetic on GUESS dimensions, not a full 3D assembly.
 - **Application-core unit tests (`firmware/tests/test_app.c`, scripted fake HAL):** action order over two pages, BUSY answered from an emulated ISR
@@ -69,9 +74,9 @@
 - Board glue behaviour on real hardware: it compiles (above) but has never run. The feed/service split is unit-tested single-threaded only; true two-core concurrency,
   USB CDC throughput and the reply mutex are untested. The carriage motion is open-loop step generation with encoder feedback only for position (steps per count is a GUESS).
 - Analog head-driver stage, schematic and PCB (docs/ELECTRONICS.md). Power-up procedure must follow docs/BENCH.md; wrong pulse parameters can destroy a head.
-- Paper handling: no sheet loading, eject or paper-detect logic in firmware (pin reserved); platen supports and mounting to the frame are not designed; the simulator treats
-  "move to page" as a fresh sheet. CAD orientation of cartridge/holder/shelf relative to the paper feed is OPEN until the cartridge is measured.
-- Carriage orientation (rail along machine X, block length along X, bolt pattern 16 along / 15 across: a GUESS), rail/block dimensions, motor-to-roller coupling, platen supports, frame
-  mounting holes for the sensor, encoder and motor brackets, and the full 3D assembly (interference between all parts) are unverified or not designed; only the vertical stack and Y layout are computed.
-- CUPS integration on a real CUPS install; PDF / cups-raster input route; job options (copies, resolution) are ignored.
+- Paper handling: no sheet loading, eject or paper-detect logic in firmware (pin reserved); the simulator treats "move to page" as a fresh sheet. Platen support posts, motor bolt pattern
+  and sensor/encoder slot bolts are now designed in CAD (consistency-checked only). CAD orientation of cartridge/holder/shelf relative to the paper feed is OPEN until the cartridge is measured.
+- Carriage orientation (rail along machine X, block length along X, bolt pattern 16 along / 15 across: a GUESS), rail/block dimensions and the motor-to-roller coupling (a purchased flexible
+  5 mm to 8 mm coupler is assumed; the standoff and coupler length are not designed) are unverified. The rail, block, belt, motors and fasteners are not in the 3D model.
+- CUPS: PDF / cups-raster input route (documents from desktop apps), job options (copies, resolution, orientation), other CUPS versions, running the filter under a locked-down `lp` user / AppArmor/SELinux profiles.
 - Parser mid-frame self-healing: relies on transport timeout + `oi_parser_reset` + ACK/retransmit (implemented in sim.c and sender.py).

@@ -14,7 +14,7 @@ that turn placeholders into measurements. `docs/PLAN.md` holds the original plan
 | `firmware/core` | C99: protocol parser, job controller (ACK/NAK/BUSY/page end), encoder-synced fire scheduler, matrix head driver, motion + feed planner, maintenance FSM, board-independent application core (`oi_app`, HAL-based) | GPL-3.0-only |
 | `firmware/tests` | unit tests, fuzzer, full printer simulator (`sim.c`) | GPL-3.0-only |
 | `host/openinkjet` | geometry, slicer, halftone, protocol, sender, serial link, CUPS filter/backend | GPL-3.0-only |
-| `host/bin`, `host/cups`, `host/install_cups.sh` | CUPS executables, PPD, installer (untested on real CUPS) | GPL-3.0-only |
+| `host/bin`, `host/cups`, `host/install_cups.sh`, `host/tests/cups_integration.py` | CUPS filter/backend wrappers, PPD, installer, end-to-end test against a real CUPS 2.4.7 (direct PNG/PBM jobs) | GPL-3.0-only |
 | `firmware/board/rp2040` | Pico SDK board layer: encoder IRQ, step generation, 74HC595 head interface, servos, USB CDC, dual-core main. Compiles (dry and armed variants); never run on hardware. DRY by default | GPL-3.0-only |
 | `electronics/` | head-drive budgets and block-level netlist with ERC rules, pin kinds and firmware bit-order simulation (no schematic/PCB yet) | CERN-OHL-S-2.0 |
 | `docs/` | plan, verification log, bench procedures, electronics design, measurements template | CC-BY-4.0 |
@@ -26,4 +26,5 @@ Repository root (chronos-forecasting) is Apache-2.0 and unrelated; this folder i
     pip install numpy pillow pytest cadquery      # gcc required for the firmware and end-to-end tests
     ./run_tests.sh                                # host + firmware (ASan/UBSan) + fuzz + simulator + CAD
     ./run_tests.sh --mutate                       # additionally: 53 firmware mutants must all be killed
+    sudo ./run_tests.sh --cups                    # also drives a real CUPS daemon end to end (root; modifies /usr/lib/cups and /etc/cups)
     export PICO_SDK_PATH=/path/to/pico-sdk        # 2.x with submodules; also builds the RP2040 firmware (needs gcc-arm-none-eabi, cmake, ninja)

@@ -30,4 +30,7 @@ if [ -n "${PICO_SDK_PATH:-}" ] && command -v arm-none-eabi-gcc >/dev/null; then
 else
   echo "SKIPPED board build (set PICO_SDK_PATH to a Pico SDK 2.x checkout with submodules and install gcc-arm-none-eabi)"
 fi
+if [ "${1:-}" = "--cups" ] || [ "${2:-}" = "--cups" ]; then       # needs root and CUPS; modifies /usr/lib/cups and /etc/cups
+  if [ "$(id -u)" = 0 ] && command -v cupsd >/dev/null; then ( cd host/tests && python3 cups_integration.py && cupstestppd ../cups/openinkjet.ppd ); else echo "SKIPPED --cups (needs root and cupsd/lpadmin/lp)"; fi
+fi
 echo ALL TESTS PASSED
