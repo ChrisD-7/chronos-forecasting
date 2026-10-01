@@ -73,12 +73,12 @@ def carriage_bracket():
     riser_h = st["riser_h"]
     top = PLATE_T / 2
     w, y_edge = bb.xlen, bb.ylen / 2
-    riser = cq.Workplane("XY").box(w, RISER_T, riser_h).translate((0, y_edge - RISER_T / 2, top - riser_h / 2))
+    riser = cq.Workplane("XY").box(w, RISER_T, riser_h).translate((0, y_edge + RISER_T / 2, top - riser_h / 2))      # OUTSIDE the plate's front edge
     shelf_bot = top - riser_h
     shelf = cq.Workplane("XY").box(w, SHELF_LEN + RISER_T, SHELF_T).translate(
-        (0, y_edge - RISER_T + (SHELF_LEN + RISER_T) / 2, shelf_bot + SHELF_T / 2))
+        (0, y_edge + (SHELF_LEN + RISER_T) / 2, shelf_bot + SHELF_T / 2))
     body = plate.union(riser).union(shelf)
-    hy = y_edge + SHELF_LEN / 2
+    hy = y_edge + RISER_T + SHELF_LEN / 2
     for sx in (-1, 1):
         body = body.cut(_cyl(sx * HOLDER_HOLE_X, hy, 3.4, shelf_bot - 1, shelf_bot + SHELF_T + 1))
     return body

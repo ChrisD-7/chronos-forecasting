@@ -49,8 +49,8 @@ def bracket_layout():
     ext_y = EXT_HOLES[1][0]
     across = MGN9H["width"] + 2 * PLATE_MARGIN
     front_plate = ext_y - across / 2
-    shelf_front = front_plate - SHELF_LEN
-    holder_c = front_plate - SHELF_LEN / 2
+    shelf_front = front_plate - RISER_T - SHELF_LEN                  # riser occupies [front_plate - RISER_T, front_plate]
+    holder_c = front_plate - RISER_T - SHELF_LEN / 2
     platen_y0 = ROLLER_D / 2 + 2.0
     return dict(ext_y=ext_y, front_plate=front_plate, shelf_front=shelf_front, ext_front=ext_y - EXT_SIZE / 2,
                 holder_y=(holder_c - 51 / 2, holder_c + 51 / 2),                # holder footprint is 51 mm long (45 + 2 x 3 wall)
@@ -86,7 +86,7 @@ def checks():
     out["riser_positive"] = st["riser_h"] > 0
     out["riser_clears_extrusion_mm"] = ly["ext_front"] - ly["front_plate"]       # riser sits at the plate's front edge, in front of the extrusion face
     out["holder_clearance_to_paper_mm"] = st["holder_bottom"] - st["paper_top"]
-    out["holder_inside_shelf"] = ly["shelf_front"] <= ly["holder_y"][0] and ly["holder_y"][1] <= ly["front_plate"]
+    out["holder_inside_shelf"] = ly["shelf_front"] <= ly["holder_y"][0] and ly["holder_y"][1] <= ly["front_plate"] - RISER_T
     out["cartridge_supported"] = ly["roller_y"][0] <= ly["cartridge_y"][0] and ly["cartridge_y"][1] <= ly["lip_y"][0] - 3.0
     out["cartridge_over_roller_mm"] = max(0.0, ly["roller_y"][1] - ly["cartridge_y"][0])
     pl = post_layout()

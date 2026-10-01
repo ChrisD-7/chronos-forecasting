@@ -13,11 +13,18 @@
 - **Electronics (`electronics/`, 23 tests):** budget arithmetic checked by hand and by an independent reviewer; Pico SDK SPI baud algorithm reproduced (and the 25 MHz assumption
   corrected); block netlist with pin kinds and 13 injected defects all caught; simulated 74HC595 chain proves the firmware bit order reaches the intended head lines; `board_config.h`
   pins equal the netlist. This is a consistency model, not a circuit.
-- **CUPS (real CUPS 2.4.7, `host/tests/cups_integration.py`, run with `./run_tests.sh --cups` as root):** `cupstestppd` on the PPD = PASS; a PNG submitted with `lp` went through
-  cupsd, `oi_filter` and the `openinkjet` backend over a pty into the C firmware simulator and the printed page equalled the expected bitmap (24 swaths, no NAKs). Covers the direct
-  image route only.
-- **CAD (50 tests total, incl. a full 3D assembly):** 16 parts placed in machine coordinates with a pairwise boolean interference check at five carriage positions (including over the
-  platen posts), plus deliberate-defect tests proving the check can fail. Dimensions are still GUESS values, so this shows the parts are consistent with each other, not that they fit real components.
+- **CUPS (real CUPS 2.4.7, `host/tests/cups_integration.py`, run with `./run_tests.sh --cups` as root):** `cupstestppd` on the PPD = PASS; a PNG submitted with `lp -n 2` went through
+  cupsd, `oi_filter` and the `openinkjet` backend over a pty into the C firmware simulator and the printed page equalled the expected bitmap (48 swaths for 2 copies, no NAKs). Covers the direct
+  image route only. Security review of the root backend (found and fixed): CUPS lets any user send RAW jobs straight to the backend, so the stream is now validated (only host->device frame
+  types, bounded columns/bytes-per-column/feed) and a bad one CANCELS that job (exit 5) without stopping the queue (tested through CUPS as user `nobody`); production accepts only
+  /dev/ttyACM<n> and /dev/ttyUSB<n> (a /dev/pts opt-in file must be root-owned and not group/world writable, used only by the integration test); the tty's termios is restored on close;
+  a missing/unreadable device STOPs the queue (exit 4) instead of retrying every 5 minutes; a failed job sends a RESET frame so the device abandons the half-printed page; images over 40 Mpixel
+  are rejected before decoding; `copies` is honoured; the package is copied to the CUPS lib dir so the unprivileged `lp` user can import it. Still open: other job options (orientation, media,
+  scaling) are ignored; PDF/text/JPEG are not routed; raw frames that are well-formed and in range can still drive the printer (no authentication).
+- **CAD (58 tests total, incl. a full 3D assembly):** 17 parts placed in machine coordinates with a pairwise boolean interference check at five carriage positions (including over the
+  platen posts), measured minimum clearances at seven positions (riser/plate to extrusion >= 3 mm, holder to paper plane >= 1 mm, carriage past every post), plus deliberate-defect tests proving the checks can fail.
+  A review found the riser clearance was 2 mm (not the 6 mm my layout claimed) and the holder 0.5 mm above the paper; both fixed (riser moved outside the plate edge, nozzle gap 2.0 mm).
+  OPEN: nothing retains the 608 bearing on the outside once the motor mount (23 mm pilot bore) is fitted. Dimensions are still GUESS values, so this shows the parts are consistent with each other, not that they fit real components.
 - **(earlier) CAD additions (33 tests total):** carriage bracket (riser + shelf, height derived from the roller and rail stack), full-height cartridge holder with nozzle window and floor rim,
   platen halves, motor mount matching the NEMA 17 flange (sourced dims), sensor and encoder brackets; coordinates, edge distances, single-solid checks and a boolean check that the
   placeholder cartridge fits the holder without interference. The vertical stack and Y layout are arithmetic on GUESS dimensions, not a full 3D assembly.
@@ -25,11 +32,11 @@
   mid-pass, ramp must fit BOTH run-in distances (lead and tail, including the exact boundary), missed columns and stalled/backwards encoder reported to the
   host (`T_ERROR`) instead of silently dropped, positioning move before a pass when column counts differ, aborted job capped after `page_timeout_ms`,
   speed clamp, paper-step accounting, config/int32-range errors, FAULT recovery.
-- **Host, 45 pytest tests:** geometry, slicer nozzle mapping (vdpi 600..50), protocol/CRC, sender (retransmit, BUSY wait, stale ACK, bounded drain),
+- **Host, 66 pytest tests:** geometry, slicer nozzle mapping (vdpi 600..50), protocol/CRC, sender (retransmit, BUSY wait, stale ACK, bounded drain),
   serial link (EOF, write timeout, resync speed), filter (aspect, margins, alpha, 16-bit, non-square dpi), CUPS filter/backend logic and exit codes,
   PPD structure and mime types, and end-to-end tests.
 - **Firmware, C99 with -Wall -Wextra -Werror and ASan+UBSan:** scheduler, parser, job controller, matrix head, motion, feed, maintenance FSM (unit tests);
-  a coherent-sequence fuzzer (300k iterations, thousands of complete passes); 53 single-line mutants of the firmware (including the application core), all killed and none invalid (`tools_mutate.py`).
+  a coherent-sequence fuzzer (300k iterations, thousands of complete passes); 56 single-line mutants of the firmware (including the application core), all killed and none invalid (`tools_mutate.py`).
 - **Full-pipeline simulator (`firmware/tests/sim.c`):** host filter -> frames -> the REAL C parser/job/scheduler/matrix driver -> simulated
   carriage, paper feed (fractional steps) and head -> printed page bitmap equals the input bitmap exactly, over a clean link, over a link
   with injected CRC errors and truncated frames, and through a pty via the real backend code.

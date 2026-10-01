@@ -57,11 +57,19 @@ def build(carriage_x=0.0):
     plate_cz = st["block_top"] + PLATE_T / 2
     shapes["bracket"] = _place(parts.carriage_bracket(), carriage_x, ext_y_rear, plate_cz, rot_z=180)
     H = parts.holder_height()
-    holder_cy = ly["front_plate"] - SHELF_LEN / 2
+    holder_cy = ly["front_plate"] - RISER_T - SHELF_LEN / 2
     shapes["holder"] = _place(parts.cartridge_holder(), carriage_x, holder_cy, st["shelf_bottom"] - H / 2)
     shapes["cartridge"] = cq.Workplane("XY").box(HP45_BOX["w"], HP45_BOX["l"], HP45_BOX["h"]).translate(
         (carriage_x, holder_cy, st["nozzle_z"] + HP45_BOX["h"] / 2)).val()
+    # motor mount on the right plate's outer face, centred on the roller axis (same 120 degree frame as the side plate)
+    mm = parts.motor_mount().val().rotate((0, 0, 0), (1, 1, 1), 120)
+    shapes["motor_mount"] = mm.translate(cq.Vector(PLATE_INNER_SPACING / 2 + SIDE_PLATE["t"] + MOTOR_PLATE_T / 2, 0, -20.0))
     return shapes
+
+
+def min_distance(a, b):
+    """Smallest gap between two solids (0 if they touch or overlap)."""
+    return a.distance(b)
 
 
 def interferences(shapes, tol=1e-3):

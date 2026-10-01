@@ -238,6 +238,17 @@ static void test_job(void) {
       n = data(f, 0, d, 4); feed_frame(&k, f, n); n = start(f, 0); feed_frame(&k, f, n);
       assert(oi_job_take_pass(&k) == 1); oi_job_pass_done(&k);
       n = oi_frame_build(f, 7, 0, 0); feed_frame(&k, f, n); assert(is_ack(n, f) && oi_job_take_page_end(&k) == 1); }  /* new page, new event */
+    /* RESET: ACKed when idle (forgets the partial swath, raises one page-end), BUSY mid-pass, rejects a payload */
+    { static uint8_t b3[64]; oi_job_t k; oi_job_init(&k, b3, sizeof b3);
+      n = hdr(f, 0, 2, 2, 1); feed_frame(&k, f, n); n = data(f, 0, d, 2); feed_frame(&k, f, n);               /* half a swath */
+      n = oi_frame_build(f, 9, 0, 0); feed_frame(&k, f, n); assert(is_ack(n, f) && oi_job_take_page_end(&k) == 1);
+      n = data(f, 0, d, 2); feed_frame(&k, f, n); assert(is_nak_echo(f, n));                               /* no header any more (offset 0 would be accepted if it survived) */
+      n = oi_frame_build(f, 9, 0, 0); feed_frame(&k, f, n); assert(is_ack(n, f) && oi_job_take_page_end(&k) == 0);   /* repeat: no 2nd event */
+      uint8_t junk[1] = {0}; n = oi_frame_build(f, 9, junk, 1); feed_frame(&k, f, n); assert(out[1] == 5);
+      n = hdr(f, 0, 2, 2, 1); feed_frame(&k, f, n); n = data(f, 0, d, 4); feed_frame(&k, f, n); n = start(f, 0); feed_frame(&k, f, n);
+      assert(oi_job_take_pass(&k) == 1);
+      n = oi_frame_build(f, 9, 0, 0); feed_frame(&k, f, n); assert(out[1] == 6);                               /* BUSY while a pass runs */
+      oi_job_pass_done(&k); }
     replies = 0; uint8_t bad[8] = {0xA5, 3, 2, 0, 0, 0, 0, 0}; feed_frame(&j, bad, 8);
     assert(replies == 0);                                                        /* CRC-invalid frame: silence, host retransmits */
 }

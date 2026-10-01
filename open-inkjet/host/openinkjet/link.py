@@ -10,8 +10,16 @@ class FdLink:
     def __init__(self, read_fd: int, write_fd: int, timeout: float = 0.3, write_timeout: float = 5.0):
         self.r, self.w, self.timeout, self.write_timeout = read_fd, write_fd, timeout, write_timeout
         self.buf = bytearray()
+        self.restore = None          # (fd, termios attrs) to put the tty back the way we found it
 
     def close(self):
+        if self.restore:
+            try:
+                import termios
+                termios.tcsetattr(self.restore[0], termios.TCSANOW, self.restore[1])
+            except Exception:
+                pass
+            self.restore = None
         for fd in {self.r, self.w}:
             try:
                 os.close(fd)
@@ -72,6 +80,7 @@ def open_serial(path: str, baud_const=None) -> FdLink:
         if not stat.S_ISCHR(os.fstat(fd).st_mode) or not os.isatty(fd):
             raise OSError("%s is not a tty" % path)
         os.set_blocking(fd, True)
+        saved = termios.tcgetattr(fd)
         tty.setraw(fd)
         attrs = termios.tcgetattr(fd)
         b = baud_const if baud_const is not None else termios.B115200
@@ -81,4 +90,6 @@ def open_serial(path: str, baud_const=None) -> FdLink:
     except (OSError, termios.error):
         os.close(fd)
         raise
-    return FdLink(fd, fd)
+    link = FdLink(fd, fd)
+    link.restore = (fd, saved)
+    return link

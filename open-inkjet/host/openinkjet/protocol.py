@@ -9,6 +9,7 @@ T_SWATH_HDR = 1   # payload: swath_idx u16, columns u32, bytes_per_col u16, dir 
 T_SWATH_DATA = 2  # payload: offset u32, raw bytes (chunk of packed columns)
 T_START_PASS = 3  # payload: swath_idx u16 (receiver must ignore a repeated idx: retransmit safe)
 T_PAGE_END = 7   # payload: empty; sent after the last swath of a page (wipe accounting, eject)
+T_RESET = 9      # host -> device: abandon the current page (best effort after a failed job); ACKed, refused with BUSY mid-pass
 T_ERROR = 8      # device -> host, unsolicited: payload code u16, swath idx u16 (codes: firmware/core/oi_app.h OI_DEVERR_*)
 T_ACK, T_NAK, T_BUSY = 4, 5, 6   # payload: crc16 u16 LE of the frame being answered; BUSY = printer is printing, retry later
 MAX_PAYLOAD = 1024
@@ -68,3 +69,30 @@ def swath_frames(idx: int, cols: bytes, columns: int, bytes_per_col: int, direct
     for off in range(0, len(cols), chunk):
         yield encode(T_SWATH_DATA, struct.pack("<I", off) + cols[off:off + chunk])
     yield encode(T_START_PASS, struct.pack("<H", idx))
+
+
+# ---- untrusted-stream validation (used by the CUPS backend, which runs as root and may be handed raw jobs) ----
+HOST_TYPES = {T_SWATH_HDR, T_SWATH_DATA, T_START_PASS, T_PAGE_END, T_RESET}
+MAX_COLUMNS = 4000        # A4 at 300 dpi is 2480; 600 dpi would be 4961 and is not supported by this firmware build
+MAX_BYTES_PER_COL = 64
+MAX_FEED_UM = 30_000      # one swath never feeds more than 30 mm (12.7 mm nominal)
+
+
+def validate_frame(ftype: int, payload: bytes):
+    """Return None if a host->device frame is acceptable, else a reason string. Rejects device-only types and out-of-range fields."""
+    if ftype not in HOST_TYPES:
+        return "frame type %d is not a host->device type" % ftype
+    if ftype == T_SWATH_HDR:
+        if len(payload) != 13:
+            return "swath header length %d" % len(payload)
+        idx, cols, bpc, d, feed = struct.unpack("<HIHbI", payload)
+        if not (1 <= cols <= MAX_COLUMNS and 1 <= bpc <= MAX_BYTES_PER_COL and d in (1, -1) and feed <= MAX_FEED_UM):
+            return "swath header out of range (columns %d, bytes/col %d, dir %d, feed %d um)" % (cols, bpc, d, feed)
+    elif ftype == T_SWATH_DATA:
+        if len(payload) < 4 or struct.unpack_from("<I", payload)[0] > MAX_COLUMNS * MAX_BYTES_PER_COL:
+            return "swath data offset/length out of range"
+    elif ftype == T_START_PASS and len(payload) != 2:
+        return "start frame length %d" % len(payload)
+    elif ftype in (T_PAGE_END, T_RESET) and len(payload) != 0:
+        return "frame type %d must have no payload" % ftype
+    return None

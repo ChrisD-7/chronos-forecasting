@@ -243,6 +243,22 @@ static void test_left_stop_must_leave_room_to_brake_before_the_home_switch(void)
     assert(app.passes == 1 && app.pass_errors == 0);
 }
 
+static void test_reset_frame_ends_the_page_and_drops_the_partial_swath(void) {
+    oi_app_cfg_t c = base_cfg(); setup(&c, &head8);
+    send_swath(0, 10, +1);                                                   /* page active after one printed swath */
+    assert(app.page_active && app.passes == 1);
+    uint8_t f[64], pl[13] = { 1, 0, 10, 0, 0, 0, 1, 0, 1, 0x9C, 0x31, 0, 0 };
+    rx(f, oi_frame_build(f, 1, pl, 13));                                     /* next swath starts... */
+    uint8_t dp[8] = { 0, 0, 0, 0, 1, 2, 3, 4 };
+    rx(f, oi_frame_build(f, 2, dp, 8));                                      /* ...and is only partly received */
+    rx(f, oi_frame_build(f, 9, 0, 0));                                       /* host gives up: RESET */
+    assert(W.reply_types[W.n_reply - 1] == 4);                               /* ACKed */
+    assert(!app.page_active && strchr(W.ev, 'W') != 0);                      /* page ended (wipe due: wipe_every_pages = 1) */
+    int fires = W.fires;
+    rx(f, oi_frame_build(f, 3, (uint8_t[]){ 1, 0 }, 2));                     /* a START for the abandoned swath must not print */
+    assert(W.reply_types[W.n_reply - 1] == 5 && W.fires == fires);          /* NAK */
+}
+
 static void test_speed_clamped_to_head_limit(void) {
     oi_app_cfg_t c = base_cfg(); c.v_max = 1000000000u; c.accel = 3000000; c.origin_counts = 300; c.margin_counts = 300;
     setup(&c, &head8); send_swath(0, 10, +1);
@@ -276,7 +292,7 @@ int main(void) {
     test_speed_clamped_to_head_limit(); test_paper_accounting(); test_config_and_range_errors();
     test_fault_is_reported_and_recovers(); test_split_feed_service_answers_busy_while_pass_pending();
     test_braking_starts_at_last_column_not_at_run_out_end(); test_homing_once_and_failure_blocks_printing();
-    test_left_stop_must_leave_room_to_brake_before_the_home_switch();
+    test_left_stop_must_leave_room_to_brake_before_the_home_switch(); test_reset_frame_ends_the_page_and_drops_the_partial_swath();
     puts("app tests OK");
     return 0;
 }

@@ -8,7 +8,7 @@
 #define OI_BARRIER() __asm__ volatile("" ::: "memory")
 #endif
 
-enum { T_HDR = 1, T_DATA = 2, T_START = 3, T_ACK = 4, T_NAK = 5, T_BUSY = 6, T_PAGE_END = 7 };
+enum { T_HDR = 1, T_DATA = 2, T_START = 3, T_ACK = 4, T_NAK = 5, T_BUSY = 6, T_PAGE_END = 7, T_ERROR = 8, T_RESET = 9 };
 
 size_t oi_frame_build(uint8_t *out, uint8_t type, const uint8_t *payload, uint16_t len) {
     out[0] = OI_SOF; out[1] = type; out[2] = (uint8_t)(len & 0xFF); out[3] = (uint8_t)(len >> 8);
@@ -35,7 +35,7 @@ static uint32_t rd32(const uint8_t *p) { return (uint32_t)p[0] | ((uint32_t)p[1]
 /* returns 1 = ACK, 0 = NAK, 2 = BUSY */
 static int handle(oi_job_t *j) {
     const oi_parser_t *p = &j->parser;
-    if ((p->type == T_HDR || p->type == T_DATA || p->type == T_START || p->type == T_PAGE_END) && (j->pass_ready || j->busy)) {
+    if ((p->type == T_HDR || p->type == T_DATA || p->type == T_START || p->type == T_PAGE_END || p->type == T_RESET) && (j->pass_ready || j->busy)) {
         /* a repeated START for the pass we already accepted is still an ACK, not BUSY (lost-ACK retransmit) */
         if (!(p->type == T_START && p->len == 2 && j->started && rd16(p->payload) == j->idx)) return 2;
     }
@@ -64,6 +64,12 @@ static int handle(oi_job_t *j) {
         if (j->have_hdr && j->started && idx == j->idx) { j->dup_acks++; return 1; }   /* idempotent: never print a swath twice */
         if (!j->have_hdr || idx != j->idx || j->received != j->total) return 0;
         j->started = 1; OI_BARRIER(); j->pass_ready = 1;      /* swath data was written before this flag becomes visible */
+        return 1;
+    }
+    if (p->type == T_RESET) {                                     /* host abandons the job: forget the half-received swath, end the page */
+        if (p->len != 0) return 0;
+        j->have_hdr = 0; j->received = 0; j->total = 0; j->started = 0;
+        if (!j->page_end_seen) { j->page_end_seen = 1; j->page_end = 1; }   /* lets the application finish the page (wipe/cap timers) */
         return 1;
     }
     if (p->type == T_PAGE_END) {

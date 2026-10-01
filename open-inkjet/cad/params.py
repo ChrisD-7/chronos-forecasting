@@ -40,7 +40,7 @@ BEARING_608 = dict(od=22.0, id=8.0, w=7.0)          # 608 bearing, standard dime
 # ---- paper path and carriage stack (added with the assembly model; GUESS unless tagged) ----
 EXT_SIZE = 20.0            # 2020 extrusion (nominal 20 x 20 mm, standard)
 MGN_H_TOTAL = 10.0         # GUESS: MGN9H rail bottom to block top (vendor listings say ~10 mm; measure)
-NOZZLE_GAP = 1.5           # GUESS: printhead to paper distance
+NOZZLE_GAP = 2.0           # GUESS: printhead to paper distance (typical thermal inkjet 1-2 mm; keeps the holder rim >= 1 mm above the paper)
 SHELF_T = 4.0
 RISER_T = 4.0
 SHELF_LEN = 55.0           # shelf depth beyond the top plate; must hold the 51 mm holder footprint

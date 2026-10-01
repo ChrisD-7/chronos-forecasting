@@ -25,8 +25,10 @@ def main():
     sim = os.path.join(work, "oi_sim")
     src = ["tests/sim.c"] + ["core/%s.c" % n for n in ("oi_app", "oi_job", "oi_proto", "oi_sched", "oi_head_matrix", "oi_motion", "oi_maint")]
     sh("gcc", "-std=c99", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Wextra", "-Werror", "-o", sim, *src, cwd=os.path.join(ROOT, "firmware"))
-    sh(os.path.join(ROOT, "host", "install_cups.sh"))
-    cupsd = subprocess.Popen(["cupsd", "-f"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    print(sh(os.path.join(ROOT, "host", "install_cups.sh")).stdout.strip())
+    os.makedirs("/etc/openinkjet", exist_ok=True)
+    open("/etc/openinkjet/allow_pty", "w").write("test only\n"); os.chmod("/etc/openinkjet/allow_pty", 0o644)   # lets the backend open a pty
+    cupsd = subprocess.Popen(["cupsd", "-f"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(50):                                   # wait for the scheduler socket
             if sh("lpstat", "-r", check=False).stdout.startswith("scheduler is running"):
@@ -42,7 +44,7 @@ def main():
         img = e2e.make_image()
         png = os.path.join(work, "page.png"); img.save(png)
         os.chmod(work, 0o755); os.chmod(png, 0o644)
-        r = sh("lp", "-d", "oi", "-o", "fit-to-page", png)
+        r = sh("lp", "-d", "oi", "-n", "2", png)                  # copies are honoured by the filter
         print(r.stdout.strip())
         deadline = time.time() + 300
         while time.time() < deadline:                         # wait for the queue to drain
@@ -50,12 +52,24 @@ def main():
                 break
             time.sleep(1)
         else:
-            print("TIMEOUT waiting for the job"); print(open("/var/log/cups/error_log").read()[-3000:]); return 1
+            print("TIMEOUT waiting for the job")
+            if os.path.exists("/var/log/cups/error_log"):
+                print(open("/var/log/cups/error_log").read()[-3000:])
+            return 1
         time.sleep(1)
+        # a RAW job bypasses the filter: an invalid stream must be cancelled by the backend, never reach the firmware
+        bad = os.path.join(work, "bad.bin")
+        import struct
+        from openinkjet import protocol as pr
+        open(bad, "wb").write(pr.encode(pr.T_SWATH_HDR, struct.pack("<HIHbI", 0, 100000, 1, 1, 12700)))          # 100000 columns: out of range
+        sh("runuser", "-u", "nobody", "--", "lp", "-d", "oi", "-o", "raw", bad, check=False)
+        time.sleep(4)
+        print("queue after the bad raw job:", sh("lpstat", "-p", "oi").stdout.strip())
+        assert "disabled" not in sh("lpstat", "-p", "oi").stdout, "a bad raw job must not stop the queue"
         os.close(slave); os.close(master)
         err = simp.stderr.read().decode(); simp.wait(timeout=60)
         print("sim:", err.strip())
-        if "passes=24" not in err:
+        if "passes=48" not in err or "naks=0" not in err:
             print(sh("tail", "-n", "40", "/var/log/cups/error_log", check=False).stdout); return 1
         got = e2e.read_pbm(out)
         want = e2e.expected(img)
@@ -65,6 +79,10 @@ def main():
     finally:
         sh("lpadmin", "-x", "oi", check=False)
         cupsd.terminate()
+        try:
+            os.remove("/etc/openinkjet/allow_pty")
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":

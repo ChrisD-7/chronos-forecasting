@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """CUPS entry points. Tested end to end against CUPS 2.4.7 for direct PNG/PBM jobs (host/tests/cups_integration.py: lp -> cupsd ->
 filter -> backend -> pty -> firmware simulator -> page bitmap), PPD checked with cupstestppd; exit codes checked against
-OpenPrinting/cups backend.h; argument conventions follow the CUPS filter/backend contract:
-argv = job user title copies options [file].
-- filter_main():  image (file or stdin) -> protocol frames on stdout.
-- backend_main(): frames (file or stdin) -> device named by DEVICE_URI 'openinkjet:/dev/ttyACM0'.
+OpenPrinting/cups backend.h; argument conventions follow the CUPS filter/backend contract: argv = job user title copies options [file].
+- filter_main():  image (file or stdin) -> protocol frames on stdout (honours `copies`; other job options are ignored).
+- backend_main(): frames (file or stdin) -> device named by DEVICE_URI 'openinkjet:/dev/ttyACM0'. Runs as root, and CUPS lets any
+  user submit RAW jobs straight to it, so the stream is treated as untrusted: only host->device frame types, with field bounds.
 Installed as executables by host/install_cups.sh (see host/bin/)."""
-import glob, os, sys, termios
+import errno, glob, os, re, stat, sys, termios, warnings
 from PIL import Image
 from .filter import frames_for_image
 from . import protocol as p
@@ -15,8 +15,23 @@ from .link import open_serial
 from .sender import send_frames, LinkError
 
 # CUPS backend exit codes (cups/backend.h)
-CUPS_BACKEND_OK, CUPS_BACKEND_FAILED, CUPS_BACKEND_STOP, CUPS_BACKEND_RETRY = 0, 1, 4, 6
-ALLOWED_PREFIXES = ("/dev/ttyACM", "/dev/ttyUSB", "/dev/pts/")     # /dev/pts allows the pty-based test
+CUPS_BACKEND_OK, CUPS_BACKEND_FAILED, CUPS_BACKEND_STOP, CUPS_BACKEND_CANCEL, CUPS_BACKEND_RETRY = 0, 1, 4, 5, 6
+TTY_RE = re.compile(r"^/dev/tty(ACM|USB)[0-9]+$")
+PTY_RE = re.compile(r"^/dev/pts/[0-9]+$")
+ALLOW_PTY_FILE = "/etc/openinkjet/allow_pty"      # test-only opt-in: must exist, be owned by root and not group/world writable
+MAX_COPIES = 99
+MAX_IMAGE_PIXELS = 40_000_000                      # PIL default is 89M (warning only up to 179M): far too much for a filter
+
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+warnings.simplefilter("error", Image.DecompressionBombWarning)
+
+
+def _pty_allowed():
+    try:
+        st = os.stat(ALLOW_PTY_FILE)
+    except OSError:
+        return False
+    return st.st_uid == 0 and not (st.st_mode & (stat.S_IWGRP | stat.S_IWOTH))
 
 
 def filter_main(argv=None, stdin=None, stdout=None):
@@ -24,17 +39,28 @@ def filter_main(argv=None, stdin=None, stdout=None):
     if len(argv) not in (6, 7):
         sys.stderr.write("ERROR: usage: oi_filter job user title copies options [file]\n")
         return 1
+    try:
+        copies = max(1, min(MAX_COPIES, int(argv[4])))
+    except ValueError:
+        copies = 1
     src = argv[6] if len(argv) == 7 else (stdin or sys.stdin.buffer)
     out = stdout or sys.stdout.buffer
     try:
-        img = Image.open(src)
+        img = Image.open(src)                                   # lazy: reads the header only
+        if img.width * img.height > MAX_IMAGE_PIXELS:           # explicit, not just PIL's warn-then-error behaviour
+            raise Image.DecompressionBombError("%dx%d pixels" % (img.width, img.height))
         img.load()
+        frames = list(frames_for_image(img))
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning, MemoryError) as e:
+        sys.stderr.write("ERROR: image too large to process (limit %d pixels): %s\n" % (MAX_IMAGE_PIXELS, e))
+        return 1
     except Exception as e:
         sys.stderr.write("ERROR: cannot read page image: %s\n" % e)
         return 1
     try:
-        for f in frames_for_image(img):
-            out.write(f)
+        for _ in range(copies):
+            for f in frames:
+                out.write(f)
         out.flush()
     except BrokenPipeError:
         return 1
@@ -42,20 +68,25 @@ def filter_main(argv=None, stdin=None, stdout=None):
 
 
 def parse_device_uri(uri: str) -> str:
-    """openinkjet:/dev/ttyACM0 -> validated real path. Rejects traversal, symlinks to elsewhere and non-tty names."""
+    """openinkjet:/dev/ttyACM0 -> validated real path. Production accepts only /dev/ttyACM<n> and /dev/ttyUSB<n> after resolving ..
+    and symlinks; /dev/pts/<n> only if the root-owned opt-in file exists (used by the integration test)."""
     if not uri.startswith("openinkjet:"):
         raise ValueError("unsupported DEVICE_URI: %r" % uri)
     path = uri[len("openinkjet:"):]
-    real = os.path.realpath(path)                    # resolves .. and symlinks before the prefix check
-    if not real.startswith(ALLOWED_PREFIXES):
-        raise ValueError("device %r resolves to %r, which is not an allowed tty path" % (path, real))
-    return real
+    real = os.path.realpath(path)
+    if TTY_RE.match(real) or (PTY_RE.match(real) and _pty_allowed()):
+        return real
+    raise ValueError("device %r resolves to %r, which is not an allowed tty path" % (path, real))
 
 
 def _frames_from(data: bytes):
+    """Split and validate a job stream. Raises ValueError with a reason for anything a well-behaved filter would not produce."""
     frames, off = [], 0
     while off < len(data):
-        _, _, n = p.decode(data[off:])               # raises ValueError on a corrupt/truncated stream
+        ftype, payload, n = p.decode(data[off:])               # ValueError on a corrupt/truncated stream
+        reason = p.validate_frame(ftype, payload)
+        if reason:
+            raise ValueError(reason)
         frames.append(data[off:off + n])
         off += n
     return frames
@@ -66,7 +97,8 @@ def backend_main(argv=None, environ=None, stdin=None):
     environ = os.environ if environ is None else environ
     if len(argv) == 1:                               # CUPS device discovery: only devices that exist
         for dev in sorted(glob.glob("/dev/ttyACM*")):
-            print('direct openinkjet:%s "Open Inkjet" "Open Inkjet USB serial" "MFG:Open Inkjet;MDL:A4;"' % dev)
+            if TTY_RE.match(dev):
+                print('direct openinkjet:%s "Open Inkjet" "Open Inkjet USB serial" "MFG:Open Inkjet;MDL:A4;"' % dev)
         return CUPS_BACKEND_OK
     if len(argv) not in (6, 7):
         sys.stderr.write("ERROR: usage: openinkjet job user title copies options [file]\n")
@@ -79,8 +111,8 @@ def backend_main(argv=None, environ=None, stdin=None):
             data = (stdin or sys.stdin.buffer).read()
         frames = _frames_from(data)
     except (ValueError, OSError) as e:
-        sys.stderr.write("ERROR: unusable job stream: %s\n" % e)
-        return CUPS_BACKEND_FAILED
+        sys.stderr.write("ERROR: unusable job stream, job cancelled: %s\n" % e)
+        return CUPS_BACKEND_CANCEL                   # cancel only this job: a bad raw job must not stop the whole queue
     try:
         dev = parse_device_uri(environ.get("DEVICE_URI", ""))
     except ValueError as e:
@@ -92,9 +124,16 @@ def backend_main(argv=None, environ=None, stdin=None):
         send_frames(frames, link.write, link.read_frame)
     except (OSError, termios.error) as e:
         sys.stderr.write("ERROR: cannot open %s: %s\n" % (dev, e))
-        return CUPS_BACKEND_RETRY
+        # a missing/unreadable/non-tty device will not fix itself in 5 minutes: stop the queue; a busy device is worth retrying
+        transient = isinstance(e, OSError) and e.errno in (errno.EBUSY, errno.EAGAIN, errno.EINTR)
+        return CUPS_BACKEND_RETRY if transient else CUPS_BACKEND_STOP
     except LinkError as e:
         sys.stderr.write("ERROR: %s\n" % e)
+        try:                                         # best effort: tell the device to abandon the half-printed page so the retry starts clean
+            link.write(p.encode(p.T_RESET))
+            link.read_frame()
+        except Exception:
+            pass
         return CUPS_BACKEND_RETRY
     finally:
         if link:

@@ -170,7 +170,7 @@ def test_platen_halves_span_the_frame_and_fit_bed():
 def test_stack_checks():
     c = assembly.checks()
     assert c["riser_positive"] and c["riser_clears_extrusion_mm"] >= 3.0                # 6 mm between the riser and the extrusion face
-    assert c["holder_clearance_to_paper_mm"] >= 0.5                                    # holder bottom never touches the paper plane
+    assert c["holder_clearance_to_paper_mm"] >= 1.0                                    # holder bottom stays 1 mm clear of the paper plane (cockle)
     assert c["holder_inside_shelf"] and c["cartridge_supported"]                       # holder footprint on the shelf; cartridge over roller+platen, clear of the lip
     assert c["nozzle_gap_mm"] == pytest.approx(NOZZLE_GAP)
     assert c["stack_paper_top"] == -10.0 and c["stack_block_top"] == pytest.approx(70.0)
@@ -220,7 +220,7 @@ import assembly_model as am
 @pytest.mark.parametrize("cx", [-139.0, -130.0, 0.0, 130.0, 139.0])
 def test_assembly_has_no_interference_at_carriage_positions(cx):
     shapes = am.build(cx)
-    assert len(shapes) == 16 and all(s.isValid() for s in shapes.values())
+    assert len(shapes) == 17 and all(s.isValid() for s in shapes.values())
     assert am.interferences(shapes) == []
 
 
@@ -246,3 +246,28 @@ def test_assembly_contacts_are_real_touches_not_gaps():
     assert s["post_0"].BoundingBox().zmin == pytest.approx(s["platen_left"].BoundingBox().zmin - POST_FOOT_T)
     nozzle_gap = s["cartridge"].BoundingBox().zmin - (-10.0)
     assert nozzle_gap == pytest.approx(NOZZLE_GAP)                             # cartridge underside NOZZLE_GAP above the paper plane
+
+
+@pytest.mark.parametrize("cx", [-145.0, -139.0, -130.0, 0.0, 130.0, 139.0, 145.0])
+def test_assembly_minimum_clearances(cx):
+    """Interference passes touching parts, so also assert real gaps between things that must NOT touch (found by review: the riser was 2 mm, not 6)."""
+    s = am.build(cx)
+    d = am.min_distance
+    assert d(s["bracket"], s["ext_rear"]) >= 3.0                                    # riser and plate keep off the extrusion (top plate rides above it)
+    for k in range(3):
+        assert d(s["bracket"], s["post_%d" % k]) >= 3.0                             # carriage can pass every post
+        assert d(s["holder"], s["post_%d" % k]) >= 3.0
+    assert d(s["holder"], s["platen_left"]) >= 1.0 and d(s["holder"], s["platen_right"]) >= 1.0
+    assert d(s["holder"], s["roller"]) >= 1.0
+    assert d(s["cartridge"], s["platen_left"]) >= NOZZLE_GAP - 1e-6 or d(s["cartridge"], s["platen_right"]) >= NOZZLE_GAP - 1e-6
+    for plate in ("plate_left", "plate_right"):
+        assert d(s["bracket"], s[plate]) >= 3.0
+    # OPEN DESIGN ITEM (found by review): the 23 mm pilot bore leaves a radial gap of (23 - 22) / 2 around the 22 mm bearing, so the mount does NOT retain it.
+    assert d(s["motor_mount"], s["bearing_r"]) == pytest.approx((NEMA17["pilot"] + PILOT_CLEAR - BEARING_608["od"]) / 2, abs=1e-6)
+
+
+def test_riser_clearance_is_what_the_layout_claims():
+    c = assembly.checks()
+    s = am.build(0.0)
+    measured = am.min_distance(s["bracket"], s["ext_rear"])
+    assert measured >= c["riser_clears_extrusion_mm"] - 1e-6 and c["riser_clears_extrusion_mm"] >= 3.0
