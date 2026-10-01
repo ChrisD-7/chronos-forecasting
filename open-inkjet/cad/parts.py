@@ -22,17 +22,25 @@ def side_plate():
     return p
 
 
+def holder_height():
+    return HP45_BOX["h"] + HOLDER_RIM_T
+
+
 def cartridge_holder():
-    b = HP45_BOX; wall = 3.0; hh = b["h"] * 0.5
-    body = cq.Workplane("XY").box(b["w"] + 2 * wall, b["l"] + 2 * wall, hh)
-    pocket = cq.Workplane("XY").box(b["w"], b["l"], hh).translate((0, 0, wall))
+    """Sleeve for the cartridge: full cartridge height plus a floor rim, with a nozzle window cut through the rim, and
+    flanges at the TOP that bolt to the carriage shelf. The cartridge is inserted from the top before the holder is bolted
+    under the shelf. Local frame: centred on the body, z in [-H/2, H/2]."""
+    b = HP45_BOX; H = holder_height(); wall = HOLDER_WALL
+    body = cq.Workplane("XY").box(b["w"] + 2 * wall, b["l"] + 2 * wall, H)
+    pocket = cq.Workplane("XY").box(b["w"], b["l"], b["h"]).translate((0, 0, HOLDER_RIM_T / 2))      # spans [-H/2+rim, H/2]
     body = body.cut(pocket)
-    fl_x = HOLDER_HOLE_X + HOLDER_FLANGE_W / 2 - 1.7             # flange out to hole centre + 1.7 + edge
+    window = cq.Workplane("XY").box(b["w"] - 2 * HOLDER_RIM_W, b["l"] - 2 * HOLDER_RIM_W, HOLDER_RIM_T + 2).translate((0, 0, -H / 2))
+    body = body.cut(window)                                                                            # nozzle window through the rim
     for sx in (-1, 1):
         flange = cq.Workplane("XY").box(HOLDER_FLANGE_W + 4, 12.0, 3.0).translate(
-            (sx * (HOLDER_HOLE_X + 0.0), 0, hh / 2 - 1.5))       # flanges at the TOP: they bolt to the shelf above
+            (sx * HOLDER_HOLE_X, 0, H / 2 - 1.5))                                                      # flanges at the TOP
         body = body.union(flange)
-        body = body.cut(_cyl(sx * HOLDER_HOLE_X, 0, 3.4, -hh, hh))
+        body = body.cut(_cyl(sx * HOLDER_HOLE_X, 0, 3.4, -H, H))
     return body
 
 
@@ -93,7 +101,7 @@ def sensor_mount():
 def motor_mount():
     n = NEMA17; f = 50.0
     p = cq.Workplane("XY").box(f, f, MOTOR_PLATE_T)
-    p = p.cut(_cyl(0, 0, n["pilot"] + 0.5, -MOTOR_PLATE_T, MOTOR_PLATE_T))          # pilot boss clearance
+    p = p.cut(_cyl(0, 0, n["pilot"] + PILOT_CLEAR, -MOTOR_PLATE_T, MOTOR_PLATE_T))          # pilot boss clearance
     for sx in (-1, 1):
         for sy in (-1, 1):
             p = p.cut(_cyl(sx * n["hole_pitch"] / 2, sy * n["hole_pitch"] / 2, n["hole_d"], -MOTOR_PLATE_T, MOTOR_PLATE_T))

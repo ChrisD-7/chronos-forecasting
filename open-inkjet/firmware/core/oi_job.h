@@ -17,10 +17,10 @@ typedef struct {
     size_t total, received;
     int have_hdr;
     /* pass hand-off */
-    int pass_ready;          /* START accepted, pass not yet taken */
-    int busy;                /* pass taken and running: buffer is owned by the machine until oi_job_pass_done() */
+    volatile int pass_ready; /* START accepted, pass not yet taken (written by RX context, cleared by machine context) */
+    volatile int busy;       /* pass taken and running: buffer is owned by the machine until oi_job_pass_done() */
     int started;             /* START already accepted for the current header (dedupe key with idx) */
-    int page_end;            /* PAGE_END accepted, not yet taken by the application */
+    volatile int page_end;   /* PAGE_END accepted, not yet taken by the application */
     int page_end_seen;       /* PAGE_END already accepted since the last HDR (dedupe) */
     uint32_t naks, dup_acks, busys;
 } oi_job_t;

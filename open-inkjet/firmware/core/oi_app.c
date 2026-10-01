@@ -62,6 +62,10 @@ static void run_pass(oi_app_t *a) {
         if (act == A_BUSY) { a->page_active = 0; send_error(a, OI_DEVERR_FAULT); return; }   /* cannot happen synchronously */
         maint_run(a, act);
     }
+    if (!a->homed && a->hal.home) {                                  /* unknown carriage position after power-up: find the switch first */
+        if (a->hal.home(a->hal.ctx) != 0) { send_error(a, OI_DEVERR_HOME); return; }
+        a->homed = 1;
+    }
     if (!oi_maint_may_fire(&a->maint)) {                             /* never fire while capped/faulted */
         a->faults++; send_error(a, OI_DEVERR_FAULT);
         oi_maint_clear_fault(&a->maint); a->page_active = 0;         /* head position unknown: back to CAPPED, next page re-uncaps */
@@ -96,7 +100,11 @@ static void run_pass(oi_app_t *a) {
     /* Position at the start of the pass first: the previous pass may have ended somewhere else (different column count). */
     int32_t pos0 = a->hal.encoder_pos(a->hal.ctx);
     if (pos0 != x0 && move_until(a, pos0 < x0 ? 1 : -1, x0, vmax / 2 ? vmax / 2 : 1, 0)) { send_error(a, OI_DEVERR_STALL); return; }
-    if (move_until(a, dir, x1, t.v_cruise, &a->sched)) { send_error(a, OI_DEVERR_STALL); return; }
+    /* Stop requested when the LAST COLUMN is reached (not at x1): braking then uses the run-out margin, whose size was checked
+     * against the ramp above. For a rightward pass the last column is index n-1; for a leftward pass it is column 0. */
+    int64_t end64 = dir > 0 ? last_col - a->cfg.counts_per_dot : (int64_t)a->cfg.origin_counts + a->cfg.bidir_offset_counts;
+    int32_t end_pos = (int32_t)end64;
+    if (move_until(a, dir, end_pos, t.v_cruise, &a->sched)) { send_error(a, OI_DEVERR_STALL); return; }
     if (a->sched.missed) send_error(a, OI_DEVERR_MISSED);              /* dots were lost: tell the host, but keep paper aligned */
     uint64_t steps = oi_feed_steps(&a->feed, j->feed_um);
     a->hal.feed_steps(a->hal.ctx, steps);
@@ -110,7 +118,7 @@ static void end_page(oi_app_t *a) {
 }
 
 void oi_app_feed(oi_app_t *a, uint8_t byte) {
-    a->page_idle_ms = 0;
+    a->rx_epoch++;                                           /* machine context turns this into 'page not idle' */
     oi_job_feed(&a->job, byte, hal_reply, a);                /* ACK/NAK/BUSY leave immediately; no pass runs here */
 }
 
@@ -134,6 +142,7 @@ void oi_app_idle(oi_app_t *a, uint32_t dt_ms) {
 }
 
 void oi_app_idle_machine(oi_app_t *a, uint32_t dt_ms) {
+    if (a->rx_epoch != a->seen_epoch) { a->seen_epoch = a->rx_epoch; a->page_idle_ms = 0; }   /* bytes arrived since last look */
     if (a->page_active && a->cfg.page_timeout_ms) {                  /* aborted job: no PAGE_END will ever come */
         a->page_idle_ms += dt_ms;
         if (a->page_idle_ms >= a->cfg.page_timeout_ms) { a->page_idle_ms = 0; end_page(a); }

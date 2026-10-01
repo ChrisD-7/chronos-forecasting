@@ -17,11 +17,26 @@ HEAD_CONTACTS = 52       # SOURCED: 52 contacts on the cartridge back
 F_FIRE_MAX = 18_000.0    # SOURCED: max firing frequency 18 kHz
 RP2040_USABLE_GPIO = 26  # Pico/Pico 2 header: GP0-GP22 and GP26-GP28 minus GP23-25 internal = 26 usable + LED (GP25) separate
 SR_BITS = 8              # 74HC595
-SPI_HZ = 25_000_000      # CHOICE (RP2040 SPI at clk_peri 125 MHz / 5); 74HC595 at 5 V is rated well above this, verify at 3.3 V
+SPI_REQUEST_HZ = 10_000_000   # CHOICE: derated; 74HC595 clock limits are tabulated at 2 / 4.5 / 6 V, nothing found for 3.3 V (UNVERIFIED)
+CLK_PERI_HZ = 125_000_000     # RP2040 clk_peri default (a 150 MHz Pico 2 differs)
 LATCH_S = 100e-9         # CHOICE: RCLK pulse
-SETTLE_S = 1.0e-6        # CHOICE: driver stage settling before the pulse (UNVERIFIED; measure)
+SETTLE_S = 1.0e-6        # CHOICE: driver stage settling after RCLK and before OE_N goes low (firmware: OI_SETTLE_NS; UNVERIFIED, measure)
 GAP_S = 0.5e-6           # CHOICE: gap between two address pulses
 DROOP_MAX = 0.05         # CHOICE: <= 5% supply droop during a worst-case column
+
+
+def rp2040_spi_hz(requested, clk=CLK_PERI_HZ):
+    """Baud the Pico SDK's spi_set_baudrate() really produces: prescale must be even (2..254), postdiv 1..256."""
+    prescale = 2
+    while prescale <= 254 and clk >= (prescale + 2) * 256 * requested:
+        prescale += 2
+    postdiv = 256
+    while postdiv > 1 and clk / (prescale * (postdiv - 1)) <= requested:
+        postdiv -= 1
+    return clk / (prescale * postdiv)
+
+
+SPI_HZ = rp2040_spi_hz(SPI_REQUEST_HZ)      # DERIVED: 8.93 MHz for a 10 MHz request at 125 MHz
 
 
 def heater_current_a():
@@ -39,9 +54,29 @@ def peak_current_a(n_simultaneous=N_PRIM):
 
 
 def bulk_capacitance_f(n_simultaneous=N_PRIM):
-    """Capacitance so the worst-case pulse droops the rail by <= DROOP_MAX (charge drawn = I * t)."""
+    """PER-PULSE minimum: capacitance so ONE worst-case pulse (14 heaters) droops the rail by <= DROOP_MAX (charge = I * t).
+    It is a lower bound: a column is many pulses, see column_capacitance_f()."""
     q = peak_current_a(n_simultaneous) * T_PULSE_S
     return q / (V_HEAD * DROOP_MAX)
+
+
+def column_charge_c(n_nozzles=N_NOZZLES):
+    """Charge drawn by a fully inked column (every nozzle once)."""
+    return n_nozzles * heater_current_a() * T_PULSE_S
+
+
+def column_capacitance_f():
+    """Capacitance to ride through a whole worst-case column with NO recharge from the supply (conservative bound)."""
+    return column_charge_c() / (V_HEAD * DROOP_MAX)
+
+
+def esr_budget_ohm(n_simultaneous=N_PRIM):
+    """Total series resistance (ESR + wiring + switch) allowed so the peak current alone drops the rail by <= DROOP_MAX."""
+    return V_HEAD * DROOP_MAX / peak_current_a(n_simultaneous)
+
+
+def average_column_current_a():
+    return column_charge_c() / worst_case_column_time_s()
 
 
 def shift_register_count(n_outputs=N_ADDR + N_PRIM):
@@ -79,7 +114,9 @@ def head_contact_budget():
 def summary():
     return dict(
         heater_current_a=heater_current_a(), pulse_energy_uj=pulse_energy_j() * 1e6, peak_current_a=peak_current_a(),
-        bulk_cap_min_uf=bulk_capacitance_f() * 1e6, shift_registers=shift_register_count(),
+        bulk_cap_per_pulse_uf=bulk_capacitance_f() * 1e6, bulk_cap_per_column_uf=column_capacitance_f() * 1e6,
+        esr_budget_mohm=esr_budget_ohm() * 1e3, avg_column_current_a=average_column_current_a(),
+        spi_mhz=SPI_HZ / 1e6, shift_registers=shift_register_count(),
         per_address_us=per_address_time_s() * 1e6, worst_column_us=worst_case_column_time_s() * 1e6,
         max_column_rate_khz=max_column_rate_hz() / 1e3,
         max_speed_counts_s_at_2cpd=max_carriage_speed_counts_s(2), unknown_head_contacts=head_contact_budget())

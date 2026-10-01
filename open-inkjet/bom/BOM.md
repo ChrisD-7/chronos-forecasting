@@ -22,7 +22,9 @@
 | Bulk capacitor, >= 18.7 uF minimum, low ESR (fit several times that) | 1+ | 5.6 A / 2 us worst-case pulse (design numbers use UNVERIFIED heater values) |
 | Pogo-pin head connector, 52 contacts | 1 | contact pitch not measured |
 | Hobby servos (cap, wiper) | 2 | actuation angles GUESS in board_config.h |
-| Platen halves, sensor mount, motor mount(s), encoder bracket, carriage bracket (printed) | 2 / 1 / 2 / 1 / 1 | cad/parts.py; NEMA17 flange dims sourced, others GUESS |
+| Platen halves, sensor mount, motor mount(s), encoder bracket, carriage bracket (printed) | 2 / 1 / 2 / 1 / 1 | cad/parts.py; NEMA17 flange dims sourced, others GUESS; sensor/encoder/motor brackets have no frame mounting holes yet |
+| Motor-to-roller shaft coupler (5 mm to 8 mm) | 1 | not designed |
+| Pull-up (OE_N) and pull-down (36 driver inputs) resistors | 37 | netlist.py; values not chosen |
 | Pi Zero 2 W (CUPS host) | 1 | |
 | 12 V PSU, wiring, cartridge contact (pogo) board | 1 | |
 | PETG/ASA filament | - | |

@@ -34,20 +34,29 @@ def stack():
     nozzle_z = paper_top + NOZZLE_GAP
     block_top = ext_z + EXT_SIZE / 2 + MGN_H_TOTAL
     plate_top = block_top + PLATE_T
-    shelf_bottom = nozzle_z + HP45_BOX["h"]                   # cartridge hangs below the shelf
+    holder_h = HP45_BOX["h"] + HOLDER_RIM_T                   # sleeve = cartridge + floor rim
+    holder_bottom = nozzle_z - HOLDER_RIM_T                   # the cartridge rests on the rim, so its nozzle face is HOLDER_RIM_T above
+    shelf_bottom = holder_bottom + holder_h                   # holder top meets the shelf underside
     riser_h = plate_top - shelf_bottom
     return dict(paper_top=paper_top, nozzle_z=nozzle_z, block_top=block_top, plate_top=plate_top,
-                shelf_bottom=shelf_bottom, riser_h=riser_h)
+                holder_bottom=holder_bottom, shelf_bottom=shelf_bottom, riser_h=riser_h)
 
 
 def bracket_layout():
-    """Y positions (machine, front = negative Y). Rear extrusion centre = EXT_HOLES[1][0]; bracket top plate centred on it."""
+    """Machine Y positions (front = negative Y). The rail is on the rear extrusion (Y = EXT_HOLES[1][0]); the bracket's top
+    plate is centred on it with its short side (the block width plus margins) across the rail; the riser is at its front edge
+    and the shelf extends forward from there. Platen: starts one roller radius plus 2 mm in front of the roller axis (Y = 0)."""
     ext_y = EXT_HOLES[1][0]
-    plate_len = MGN9H["length"] + 12.0
-    front_plate = ext_y - plate_len / 2
+    across = MGN9H["width"] + 2 * PLATE_MARGIN
+    front_plate = ext_y - across / 2
     shelf_front = front_plate - SHELF_LEN
-    return dict(ext_y=ext_y, front_plate=front_plate, shelf_front=shelf_front,
-                ext_front=ext_y - EXT_SIZE / 2, holder_y_span=(shelf_front + (SHELF_LEN - 51) / 2, front_plate - (SHELF_LEN - 51) / 2))
+    holder_c = front_plate - SHELF_LEN / 2
+    platen_y0 = ROLLER_D / 2 + 2.0
+    return dict(ext_y=ext_y, front_plate=front_plate, shelf_front=shelf_front, ext_front=ext_y - EXT_SIZE / 2,
+                holder_y=(holder_c - 51 / 2, holder_c + 51 / 2),                # holder footprint is 51 mm long (45 + 2 x 3 wall)
+                cartridge_y=(holder_c - HP45_BOX["l"] / 2, holder_c + HP45_BOX["l"] / 2),
+                platen_y=(platen_y0, platen_y0 + PLATEN_HALF["w"]), roller_y=(-ROLLER_D / 2, ROLLER_D / 2),
+                lip_y=(platen_y0 + PLATEN_HALF["w"] - 2.0, platen_y0 + PLATEN_HALF["w"]))
 
 
 def checks():
@@ -63,7 +72,11 @@ def checks():
     st, ly = stack(), bracket_layout()
     out.update({"stack_" + k: v for k, v in st.items()})
     out["riser_positive"] = st["riser_h"] > 0
-    out["shelf_clears_extrusion_y"] = ly["front_plate"] - SHELF_LEN < ly["ext_front"] - 3.0     # shelf ends well in front of the extrusion
+    out["riser_clears_extrusion_mm"] = ly["ext_front"] - ly["front_plate"]       # riser sits at the plate's front edge, in front of the extrusion face
+    out["holder_clearance_to_paper_mm"] = st["holder_bottom"] - st["paper_top"]
+    out["holder_inside_shelf"] = ly["shelf_front"] <= ly["holder_y"][0] and ly["holder_y"][1] <= ly["front_plate"]
+    out["cartridge_supported"] = ly["roller_y"][0] <= ly["cartridge_y"][0] and ly["cartridge_y"][1] <= ly["lip_y"][0] - 3.0
+    out["cartridge_over_roller_mm"] = max(0.0, ly["roller_y"][1] - ly["cartridge_y"][0])
     out["nozzle_gap_mm"] = st["nozzle_z"] - st["paper_top"]
     return out
 

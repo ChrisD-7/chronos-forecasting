@@ -77,12 +77,46 @@ def test_holder_bolts_match_carriage_plate_and_hit_flange():
         assert (sx * HOLDER_HOLE_X, 0.0) in plate and (sx * HOLDER_HOLE_X, 0.0) in hold
 
 
-def test_holder_pocket_is_enclosed_with_walls():
+def test_holder_has_walls_floor_rim_and_nozzle_window():
     s = PARTS["cartridge_holder"]().val()
-    c = cq.Workplane("XY").box(1, 1, 1).translate((0, 0, 3.0))            # a point inside the pocket, above the floor
-    assert not s.isInside(cq.Vector(0, 0, 5.0))                            # pocket is empty
-    assert s.isInside(cq.Vector(HP45_BOX["w"] / 2 + 1.5, 0, 0))            # 3 mm wall present on the sides
-    assert s.isInside(cq.Vector(0, 0, -HP45_BOX["h"] * 0.25 + 1.0))        # floor present
+    H = HP45_BOX["h"] + HOLDER_RIM_T
+    assert not s.isInside(cq.Vector(0, 0, 0))                                          # pocket is empty
+    assert s.isInside(cq.Vector(HP45_BOX["w"] / 2 + HOLDER_WALL / 2, 0, 0))            # side wall present
+    assert s.isInside(cq.Vector(HP45_BOX["w"] / 2 - HOLDER_RIM_W / 2, 0, -H / 2 + HOLDER_RIM_T / 2))   # rim the cartridge rests on
+    assert not s.isInside(cq.Vector(0, 0, -H / 2 + HOLDER_RIM_T / 2))                  # nozzle window through the floor
+    assert not s.isInside(cq.Vector(0, 0, H / 2 - 0.1))                                # open at the top (cartridge goes in from above)
+
+
+def test_cartridge_fits_holder_and_stack_numbers_close():
+    st = assembly.stack()
+    H = HP45_BOX["h"] + HOLDER_RIM_T
+    holder = PARTS["cartridge_holder"]().val()
+    cart = cq.Workplane("XY").box(HP45_BOX["w"], HP45_BOX["l"], HP45_BOX["h"]).translate((0, 0, HOLDER_RIM_T / 2)).val()
+    assert holder.intersect(cart).Volume() == pytest.approx(0.0, abs=1e-6)             # cartridge sits inside the sleeve, touching only
+    cb = cart.BoundingBox()
+    assert cb.zmin == pytest.approx(-H / 2 + HOLDER_RIM_T) and cb.zmax == pytest.approx(H / 2)    # on the rim, top flush with the holder top
+    assert st["shelf_bottom"] - H + HOLDER_RIM_T == pytest.approx(st["nozzle_z"])      # nozzle face where the stack says
+    assert st["nozzle_z"] - st["paper_top"] == pytest.approx(NOZZLE_GAP)               # and NOZZLE_GAP above the paper
+
+
+def test_holder_flanges_are_at_the_top_to_meet_the_shelf():
+    s = PARTS["cartridge_holder"]().val()
+    H = HP45_BOX["h"] + HOLDER_RIM_T
+    assert s.isInside(cq.Vector(HOLDER_HOLE_X + 5.5, 4.0, H / 2 - 1.5))                # flange material at the top
+    assert not s.isInside(cq.Vector(HOLDER_HOLE_X + 5.5, 4.0, -H / 2 + 1.5))           # none at the bottom
+
+
+def test_carriage_plate_volume_hand_calc():
+    bb = carriage_plate.build().val().BoundingBox()
+    w, l = bb.xlen, bb.ylen
+    assert w == pytest.approx(max(MGN9H["length"] + 2 * PLATE_MARGIN, 2 * (HOLDER_HOLE_X + 1.7 + 2.3)))   # x along the rail
+    assert l == pytest.approx(MGN9H["width"] + 2 * PLATE_MARGIN)                                            # y across the rail
+    holes = 6 * math.pi * 1.7 ** 2 * PLATE_T
+    assert carriage_plate.build().val().Volume() == pytest.approx(w * l * PLATE_T - holes, rel=1e-3)
+    pts = {(h[0], h[1]) for h in cyl_holes(carriage_plate.build()) if h[2] == pytest.approx(1.7)}
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            assert (sx * MGN9H["bolt_along"] / 2, sy * MGN9H["bolt_across"] / 2) in pts       # along-rail pitch on x, across-rail on y
 
 
 def test_roller_block_wall_and_shaft():
@@ -92,14 +126,6 @@ def test_roller_block_wall_and_shaft():
     for h in holes:
         if abs(h[2] - 1.7) < 0.01:
             assert math.hypot(h[0], h[1]) - 1.7 - r_seat >= 1.2            # bolt hole to bearing bore wall
-
-
-def test_carriage_plate_volume_hand_calc():
-    bb = carriage_plate.build().val().BoundingBox()
-    w, l = bb.xlen, bb.ylen
-    assert w == pytest.approx(max(MGN9H["width"] + 2 * PLATE_MARGIN, 2 * (HOLDER_HOLE_X + 1.7 + 2.3)))
-    holes = 6 * math.pi * 1.7 ** 2 * PLATE_T
-    assert carriage_plate.build().val().Volume() == pytest.approx(w * l * PLATE_T - holes, rel=1e-3)
 
 
 def test_assembly_budget():
@@ -118,7 +144,7 @@ def test_motor_mount_matches_nema17_flange():
     for sx in (-1, 1):
         for sy in (-1, 1):
             assert (sx * NEMA17["hole_pitch"] / 2, sy * NEMA17["hole_pitch"] / 2, NEMA17["hole_d"] / 2) in have
-    assert (0.0, 0.0, (NEMA17["pilot"] + 0.5) / 2) in have                         # pilot clearance bore
+    assert (0.0, 0.0, (NEMA17["pilot"] + PILOT_CLEAR) / 2) in have                  # pilot clearance bore (23 mm for a 22 mm boss)
     bb = PARTS["motor_mount"]().val().BoundingBox()
     assert bb.xlen >= NEMA17["face"]                                                # plate covers the 42.3 mm flange
 
@@ -137,19 +163,14 @@ def test_carriage_bracket_reaches_paper_with_correct_gap():
     assert {(h[0], 0.0) for h in shelf_holes} == hold                               # x positions match; y is the shelf centre
 
 
-def test_holder_flanges_are_at_the_top_to_meet_the_shelf():
-    s = PARTS["cartridge_holder"]().val()
-    hh = HP45_BOX["h"] * 0.5
-    assert s.isInside(cq.Vector(HOLDER_HOLE_X + 5.5, 4.0, hh / 2 - 1.5))            # flange material at the top
-    assert not s.isInside(cq.Vector(HOLDER_HOLE_X + 5.5, 4.0, -hh / 2 + 1.5))       # none at the bottom
-
-
 def test_platen_halves_cover_a4_and_fit_bed():
     assert 2 * PLATEN_HALF["l"] >= PAGE_W + 2 * PAGE_MARGIN and PLATEN_HALF["l"] <= BED_MM
 
 
 def test_stack_checks():
     c = assembly.checks()
-    assert c["riser_positive"] and c["shelf_clears_extrusion_y"]
+    assert c["riser_positive"] and c["riser_clears_extrusion_mm"] >= 3.0                # 6 mm between the riser and the extrusion face
+    assert c["holder_clearance_to_paper_mm"] >= 0.5                                    # holder bottom never touches the paper plane
+    assert c["holder_inside_shelf"] and c["cartridge_supported"]                       # holder footprint on the shelf; cartridge over roller+platen, clear of the lip
     assert c["nozzle_gap_mm"] == pytest.approx(NOZZLE_GAP)
     assert c["stack_paper_top"] == -10.0 and c["stack_block_top"] == pytest.approx(70.0)

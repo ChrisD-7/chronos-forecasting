@@ -6,7 +6,8 @@ BED_MM = 220.0            # printable bed limit we design to (Ender-3 class)
 
 # MGN9H carriage block. SOURCED (vendor snippet, hta3d.com / robotdigg): body ~20 x 40 x 8 mm,
 # M3 holes ~15 x 16 mm. NOT confirmed against a datasheet (dold-mechatronik PDF was unreachable).
-MGN9H = dict(width=20.0, length=40.0, bolt_x=15.0, bolt_y=16.0, bolt_d=3.0)  # SOURCED
+# bolt_across = hole spacing across the rail (plate y), bolt_along = along the rail (plate x). Vendor says "15 x 16"; which is which is a GUESS.
+MGN9H = dict(width=20.0, length=40.0, bolt_across=15.0, bolt_along=16.0, bolt_d=3.0)  # SOURCED (weak)
 
 PLATE_T = 4.0             # GUESS: adapter plate thickness
 PLATE_MARGIN = 6.0        # GUESS
@@ -50,3 +51,8 @@ NEMA17 = dict(face=42.3, hole_pitch=31.0, pilot=22.0, hole_d=3.4)
 MOTOR_PLATE_T = 6.0
 SENSOR_HOLE_PITCH = 20.0   # GUESS: optical end-stop / paper sensor board
 ENCODER_HOLE_PITCH = 12.0  # GUESS: encoder reader
+
+HOLDER_RIM_T = 1.0         # floor rim that the cartridge rests on; the nozzle window is cut inside it
+HOLDER_RIM_W = 2.0         # rim width around the nozzle window
+HOLDER_WALL = 3.0
+PILOT_CLEAR = 1.0          # extra diameter on the motor pilot bore (FDM tolerance; was 0.5, too tight)

@@ -3,6 +3,11 @@
 #include "oi_job.h"
 #include <string.h>
 
+/* Compiler/CPU ordering point for the two-context case (RX context vs machine context). */
+#ifndef OI_BARRIER
+#define OI_BARRIER() __asm__ volatile("" ::: "memory")
+#endif
+
 enum { T_HDR = 1, T_DATA = 2, T_START = 3, T_ACK = 4, T_NAK = 5, T_BUSY = 6, T_PAGE_END = 7 };
 
 size_t oi_frame_build(uint8_t *out, uint8_t type, const uint8_t *payload, uint16_t len) {
@@ -58,7 +63,7 @@ static int handle(oi_job_t *j) {
         uint16_t idx = rd16(p->payload);
         if (j->have_hdr && j->started && idx == j->idx) { j->dup_acks++; return 1; }   /* idempotent: never print a swath twice */
         if (!j->have_hdr || idx != j->idx || j->received != j->total) return 0;
-        j->started = 1; j->pass_ready = 1;
+        j->started = 1; OI_BARRIER(); j->pass_ready = 1;      /* swath data was written before this flag becomes visible */
         return 1;
     }
     if (p->type == T_PAGE_END) {
@@ -83,7 +88,7 @@ void oi_job_feed(oi_job_t *j, uint8_t b, oi_reply_fn reply, void *ctx) {
 
 int oi_job_take_pass(oi_job_t *j) {
     int r = j->pass_ready;
-    if (r) { j->pass_ready = 0; j->busy = 1; }
+    if (r) { j->busy = 1; OI_BARRIER(); j->pass_ready = 0; }   /* busy BEFORE ready clears: the RX side never sees both 0 mid-handoff */
     return r;
 }
 void oi_job_pass_done(oi_job_t *j) { j->busy = 0; }

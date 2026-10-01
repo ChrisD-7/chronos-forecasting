@@ -24,6 +24,7 @@ typedef struct {
     void (*feed_steps)(void *ctx, uint64_t steps);        /* blocking paper feed */
     void (*maint)(void *ctx, oi_maint_action_t a);        /* blocking cap/uncap/spit/wipe/move actions */
     void (*reply)(void *ctx, const uint8_t *f, size_t n); /* transport write */
+    int (*home)(void *ctx);                               /* optional (NULL ok): drive to the home switch and zero the encoder; 0 = ok */
 } oi_hal_t;
 
 typedef struct {
@@ -42,15 +43,17 @@ typedef struct {
 
 /* Device error codes, sent to the host as an unsolicited T_ERROR (8) frame: payload = code u16 LE, swath idx u16 LE.
  * The host sender raises LinkError on it. */
-enum { OI_DEVERR_FAULT = 1, OI_DEVERR_RAMP = 2, OI_DEVERR_CONFIG = 3, OI_DEVERR_MISSED = 4, OI_DEVERR_STALL = 5, OI_DEVERR_RANGE = 6 };
+enum { OI_DEVERR_FAULT = 1, OI_DEVERR_RAMP = 2, OI_DEVERR_CONFIG = 3, OI_DEVERR_MISSED = 4, OI_DEVERR_STALL = 5, OI_DEVERR_RANGE = 6, OI_DEVERR_HOME = 7 };
 
 typedef struct {
     oi_hal_t hal; oi_app_cfg_t cfg;
     oi_head_t *head;
     oi_job_t job; oi_maint_t maint; oi_feed_t feed; oi_sched_t sched;
     uint64_t paper_steps;
-    int page_active;
+    int page_active, homed;
     uint32_t page_idle_ms;
+    volatile uint32_t rx_epoch;   /* incremented by the RX context for every received byte (single writer) */
+    uint32_t seen_epoch;          /* machine context only */
     uint32_t passes, pass_errors, faults, last_error;
 } oi_app_t;
 

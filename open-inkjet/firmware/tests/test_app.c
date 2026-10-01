@@ -14,6 +14,7 @@ typedef struct {
     uint32_t max_speed; uint64_t fed;
     uint8_t reply_types[64]; int n_reply; uint16_t err_codes[8]; int n_err;
     int fires; int fire_hook_calls;
+    int32_t stops[16]; int n_stops; int home_calls, home_result;
     void (*wait_hook)(void *w);               /* called on every wait tick (used to emulate an ISR) */
     oi_app_t *app; int hook_fired;
 } World;
@@ -21,7 +22,7 @@ static World W;
 
 static void ev(char c) { W.ev[W.nev++] = c; W.ev[W.nev] = 0; }
 static int32_t h_pos(void *c) { (void)c; return W.pos; }
-static void h_drive(void *c, int dir, uint32_t v) { (void)c; W.dir = dir; if (dir == 0) ev('s'); else { ev(dir > 0 ? '>' : '<'); if (v > W.max_speed) W.max_speed = v; } }
+static void h_drive(void *c, int dir, uint32_t v) { (void)c; W.dir = dir; if (dir == 0) { ev('s'); if (W.n_stops < 16) W.stops[W.n_stops++] = W.pos; } else { ev(dir > 0 ? '>' : '<'); if (v > W.max_speed) W.max_speed = v; } }
 static void h_wait(void *c) { (void)c; if (!W.stall) W.pos += W.dir * W.step_per_wait; if (W.wait_hook) W.wait_hook(&W); }
 static void h_feed(void *c, uint64_t s) { (void)c; W.fed += s; ev('F'); }
 static void h_maint(void *c, oi_maint_action_t a) {
@@ -34,6 +35,7 @@ static void h_reply(void *c, const uint8_t *f, size_t n) {
     if (W.n_reply < 64) W.reply_types[W.n_reply++] = f[1];
     if (f[1] == 8) W.err_codes[W.n_err++] = (uint16_t)(f[4] | (f[5] << 8));
 }
+static int h_home(void *c) { (void)c; W.home_calls++; if (W.home_result == 0) W.pos = 0; return W.home_result; }
 static void h_fire(oi_head_t *h, const uint8_t *bits) { (void)h; (void)bits; W.fires++; }
 
 static uint8_t swbuf[2048];
@@ -49,7 +51,7 @@ static oi_app_cfg_t base_cfg(void) {
 }
 static oi_app_t app;
 static void setup(const oi_app_cfg_t *cfg, oi_head_t *head) {
-    static oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply };
+    static oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply, 0 };
     memset(&W, 0, sizeof W); W.step_per_wait = 1; W.app = &app;
     assert(oi_app_init(&app, &hal, cfg, head, swbuf, sizeof swbuf) == 0);
 }
@@ -70,9 +72,10 @@ static int has_reply(uint8_t type) { for (int i = 0; i < W.n_reply; i++) if (W.r
 static void test_action_order_two_pages(void) {
     oi_app_cfg_t c = base_cfg(); setup(&c, &head8);
     send_swath(0, 10, +1); send_swath(1, 10, -1); send_page_end();
-    assert(strcmp(W.ev, "USM>sF<sFW") == 0);                                 /* uncap, spit, move, R, feed, L, feed, wipe */
+    /* uncap, spit, move; R pass (stops at its last column) feed; reposition right, L pass feed; wipe */
+    assert(strcmp(W.ev, "USM>sF>s<sFW") == 0);
     send_swath(0, 10, +1); send_swath(1, 10, -1); send_page_end();          /* page 2: swath indices restart, no re-uncap */
-    assert(strcmp(W.ev, "USM>sF<sFW" "M>sF<sFW") == 0);
+    assert(strcmp(W.ev, "USM>sF>s<sFW" "M<s>sF>s<sFW") == 0);
     assert(app.passes == 4 && app.pass_errors == 0 && W.fires == 4 * 10);
     assert(W.max_speed <= 36000);
 }
@@ -156,7 +159,7 @@ static void test_positioning_before_pass_when_column_counts_differ(void) {
     send_swath(1, 500, -1);                                                  /* leftward pass starts at 200 + 1000 + 300 = 1500 */
     assert(app.pass_errors == 0 && app.passes == 2);
     assert(W.fires == 10 + 500);                                             /* ALL 500 columns fired (used to lose 289) */
-    assert(strstr(W.ev, "USM>sF>s<sF") != 0);                                /* extra positioning move before the leftward pass */
+    assert(strstr(W.ev, "USM>sF>s<sF") != 0);                                /* positioning move (> to 1500) before the leftward pass */
 }
 
 static void test_aborted_job_is_capped(void) {
@@ -190,6 +193,30 @@ static void test_fault_is_reported_and_recovers(void) {
     assert(strchr(W.ev, 'U') != 0 && W.fires == 10 && app.passes == 1);
 }
 
+static void test_braking_starts_at_last_column_not_at_run_out_end(void) {
+    oi_app_cfg_t c = base_cfg(); setup(&c, &head8);
+    send_swath(0, 10, +1);                                                   /* last column index 9 at 200 + 9*2 = 218; x1 would be 520 */
+    assert(W.n_stops == 1 && W.stops[0] == 218);
+    send_swath(1, 10, -1);                                                   /* positioning stop at x0 = 520, then the pass stops at column 0 = 200 */
+    assert(W.n_stops == 3 && W.stops[1] == 520 && W.stops[2] == 200);
+}
+
+static void test_homing_once_and_failure_blocks_printing(void) {
+    static oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply, h_home };
+    oi_app_cfg_t c = base_cfg();
+    memset(&W, 0, sizeof W); W.step_per_wait = 1; W.pos = 777;               /* power-up position is arbitrary */
+    assert(oi_app_init(&app, &hal, &c, &head8, swbuf, sizeof swbuf) == 0);
+    send_swath(0, 10, +1); send_swath(1, 10, -1); send_page_end();
+    send_swath(0, 10, +1); send_page_end();
+    assert(W.home_calls == 1 && app.homed && app.pass_errors == 0);          /* homed before the first pass only */
+    memset(&W, 0, sizeof W); W.step_per_wait = 1; W.home_result = -1;        /* switch never found */
+    assert(oi_app_init(&app, &hal, &c, &head8, swbuf, sizeof swbuf) == 0);
+    send_swath(0, 10, +1);
+    assert(W.err_codes[0] == OI_DEVERR_HOME && app.passes == 0 && W.fires == 0 && !app.homed);
+    W.home_result = 0; send_swath(0, 10, +1);                                 /* retry after the fault is cleared */
+    assert(app.homed && W.fires == 10);
+}
+
 static void test_speed_clamped_to_head_limit(void) {
     oi_app_cfg_t c = base_cfg(); c.v_max = 1000000000u; c.accel = 3000000; c.origin_counts = 300; c.margin_counts = 300;
     setup(&c, &head8); send_swath(0, 10, +1);
@@ -210,7 +237,7 @@ static void test_config_and_range_errors(void) {
     send_swath(0, 5, +1);
     assert(W.err_codes[0] == OI_DEVERR_RANGE && app.passes == 0);
     oi_app_cfg_t bad = base_cfg(); bad.stall_ticks = 0;
-    static oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply };
+    static oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply, 0 };
     assert(oi_app_init(&app, &hal, &bad, &head8, swbuf, sizeof swbuf) == -1);
     bad = base_cfg(); bad.steps_per_mm_x1000 = 0;
     assert(oi_app_init(&app, &hal, &bad, &head8, swbuf, sizeof swbuf) == -1);
@@ -222,6 +249,7 @@ int main(void) {
     test_positioning_before_pass_when_column_counts_differ(); test_aborted_job_is_capped();
     test_speed_clamped_to_head_limit(); test_paper_accounting(); test_config_and_range_errors();
     test_fault_is_reported_and_recovers(); test_split_feed_service_answers_busy_while_pass_pending();
+    test_braking_starts_at_last_column_not_at_run_out_end(); test_homing_once_and_failure_blocks_printing();
     puts("app tests OK");
     return 0;
 }

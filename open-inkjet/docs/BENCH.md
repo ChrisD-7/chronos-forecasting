@@ -16,6 +16,7 @@ modelled as a constant lag. These procedures replace those assumptions with meas
 5. Acceptance: a 300-nozzle test column prints 300 distinct dots on paper with the head held static; count them.
 
 ## Phase 3: carriage + encoder
+0. Before the first move: confirm the left home switch polarity (firmware assumes closes to GND, pulled up), the encoder direction (+ counts when moving right), and the steps-per-count ratio (`OI_STEPS_PER_COUNT_X1000`, assumed 1.0). Run with the head DRY (the default) and a hand on the power switch: the first homing move runs into the switch at `OI_HOME_SPEED_COUNTS_S`.
 1. Fit MGN9H to the printed side plates; check rail parallelism to the platen (dial gauge, target < 0.1 mm over 210 mm).
 2. Measure encoder counts per mm over 200 mm travel; set `counts_per_dot` and confirm 2 counts/dot at 150 lpi quadrature.
 3. Print a 1-dot vertical line at 3 x positions in each direction; measure the forward/reverse offset and set

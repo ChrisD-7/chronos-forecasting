@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
     memset(inv, -1, sizeof inv);
     for (int n = 0; n < NOZ; n++) inv[nozzle_map[n] >> 8][nozzle_map[n] & 0xFF] = (int16_t)n;
     if (oi_matrix_head_init(&mhead, &MHAL, nozzle_map, NOZ, NADDR, NPRIM)) return 3;
-    oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply };
+    oi_hal_t hal = { 0, h_pos, h_drive, h_wait, h_feed, h_maint, h_reply, 0 };
     oi_app_cfg_t cfg = {
         .counts_per_dot = COUNTS_PER_DOT, .origin_counts = NOMINAL_ORIGIN - lag, .bidir_offset_counts = bidir,
         .left_stop_counts = 0, .margin_counts = MARGIN, .v_max = oi_max_cruise_for_head(18000, COUNTS_PER_DOT) / 4,

@@ -8,11 +8,12 @@ from params import MGN9H, PLATE_T, PLATE_MARGIN, BED_MM, HOLDER_HOLE_X
 
 def build(holder_holes=((-HOLDER_HOLE_X, 0.0), (HOLDER_HOLE_X, 0.0)), holder_d=3.4):
     # wide enough that the holder bolts keep >= 2.3 mm edge distance
-    w = max(MGN9H["width"] + 2 * PLATE_MARGIN, 2 * (HOLDER_HOLE_X + holder_d / 2 + 2.3))
-    l = MGN9H["length"] + 2 * PLATE_MARGIN
+    # plate x = along the rail (block length), plate y = across the rail (block width)
+    w = max(MGN9H["length"] + 2 * PLATE_MARGIN, 2 * (HOLDER_HOLE_X + holder_d / 2 + 2.3))
+    l = MGN9H["width"] + 2 * PLATE_MARGIN
     plate = cq.Workplane("XY").box(w, l, PLATE_T)
     # clearance holes for M3 (3.4 mm) at the carriage bolt pattern
-    bx, by = MGN9H["bolt_x"] / 2, MGN9H["bolt_y"] / 2
+    bx, by = MGN9H["bolt_along"] / 2, MGN9H["bolt_across"] / 2
     plate = plate.faces(">Z").workplane().pushPoints(
         [(sx * bx, sy * by) for sx in (-1, 1) for sy in (-1, 1)]).hole(3.4)
     if holder_holes:
