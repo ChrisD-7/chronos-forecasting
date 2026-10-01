@@ -51,7 +51,7 @@ class FdLink:
                 del self.buf[:i]                       # skip garbage before the next SOF in one step
             if self.buf:
                 try:
-                    t, pl, n = p.decode(bytes(self.buf))
+                    t, pl, n = p.decode(self.buf)
                     del self.buf[:n]
                     return t, pl
                 except p.NeedMore:

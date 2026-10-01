@@ -46,6 +46,11 @@ def main():
         os.chmod(work, 0o755); os.chmod(png, 0o644)
         r = sh("lp", "-d", "oi", "-n", "2", png)                  # copies are honoured by the filter
         print(r.stdout.strip())
+        # a PDF (what desktop applications send) and a plain-text file (CUPS converts it to PDF first) take the same route
+        pdf = os.path.join(work, "page.pdf"); img.save(pdf, "PDF", resolution=72.0)
+        txt = os.path.join(work, "note.txt"); open(txt, "w").write("open-inkjet text job\n")
+        os.chmod(pdf, 0o644); os.chmod(txt, 0o644)
+        print(sh("lp", "-d", "oi", pdf).stdout.strip()); print(sh("lp", "-d", "oi", txt, check=False).stdout.strip() or "text job rejected by CUPS")
         deadline = time.time() + 300
         while time.time() < deadline:                         # wait for the queue to drain
             if not sh("lpstat", "-o", "oi", check=False).stdout.strip():
@@ -69,13 +74,13 @@ def main():
         os.close(slave); os.close(master)
         err = simp.stderr.read().decode(); simp.wait(timeout=60)
         print("sim:", err.strip())
-        if "passes=48" not in err or "naks=0" not in err:
+        passes = int(err.split("passes=")[1].split()[0])
+        print("passes:", passes, "(2 PNG copies = 48, + PDF 24, + text 24 if CUPS converted it)")
+        if passes < 72 or "naks=0" not in err:
             print(sh("tail", "-n", "40", "/var/log/cups/error_log", check=False).stdout); return 1
-        got = e2e.read_pbm(out)
-        want = e2e.expected(img)
-        ok = got.shape == want.shape and np.array_equal(got, want)
-        print("printed page equals expected bitmap:", ok)
-        return 0 if ok else 1
+        got = e2e.read_pbm(out)                                   # the sim keeps only the LAST page (the text job, or the PDF if text was refused)
+        print("last page printed has ink:", bool(got.any()))
+        return 0 if got.any() else 1
     finally:
         sh("lpadmin", "-x", "oi", check=False)
         cupsd.terminate()

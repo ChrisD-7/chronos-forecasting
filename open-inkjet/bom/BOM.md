@@ -19,7 +19,7 @@
 | RP2040 board (Raspberry Pi Pico class; firmware builds for it) | 1 | board firmware compiles with Pico SDK 2.3.1; not run on hardware |
 | 74HC595 shift registers | 5 | 40 outputs for 22 address + 14 primitive + 4 spare (electronics/design.py) |
 | 12 V head driver stage: 22 address drivers + 14 high-current primitive switches, level shifting, fuse | 1 | analog stage NOT designed; needs measured head parameters (docs/ELECTRONICS.md) |
-| Bulk capacitor, >= 18.7 uF minimum, low ESR (fit several times that) | 1+ | 5.6 A / 2 us worst-case pulse (design numbers use UNVERIFIED heater values) |
+| Bulk capacitor: 470 uF or more, total ESR + wiring < 107 mohm (400 uF is the no-recharge bound; 18.7 uF is only the single-pulse minimum) | 1+ | 5.6 A / 2 us worst-case pulse; sized with electronics/spice_sim.py (design numbers use UNVERIFIED heater values) |
 | Pogo-pin head connector, 52 contacts | 1 | contact pitch not measured |
 | Hobby servos (cap, wiper) | 2 | actuation angles GUESS in board_config.h |
 | Platen halves (175 mm), platen posts (1 joint + 2 outer), sensor mount, motor mount(s), encoder bracket, carriage bracket (printed) | 2 / 3 / 1 / 2 / 1 / 1 | cad/parts.py; NEMA17 flange dims sourced, others GUESS; M5 slot bolts on the posts, sensor and encoder brackets |

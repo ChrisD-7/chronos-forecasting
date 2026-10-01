@@ -3,11 +3,12 @@
 """CUPS entry points. Tested end to end against CUPS 2.4.7 for direct PNG/PBM jobs (host/tests/cups_integration.py: lp -> cupsd ->
 filter -> backend -> pty -> firmware simulator -> page bitmap), PPD checked with cupstestppd; exit codes checked against
 OpenPrinting/cups backend.h; argument conventions follow the CUPS filter/backend contract: argv = job user title copies options [file].
-- filter_main():  image (file or stdin) -> protocol frames on stdout (honours `copies`; other job options are ignored).
+- filter_main():  PNG/PBM image or PDF (file or stdin) -> protocol frames on stdout. Honours `copies` and orientation; media size, scaling
+  and resolution options are ignored (every page is fitted to A4). PDF pages are rasterised with pdftoppm (poppler-utils) at 300 dpi.
 - backend_main(): frames (file or stdin) -> device named by DEVICE_URI 'openinkjet:/dev/ttyACM0'. Runs as root, and CUPS lets any
   user submit RAW jobs straight to it, so the stream is treated as untrusted: only host->device frame types, with field bounds.
 Installed as executables by host/install_cups.sh (see host/bin/)."""
-import errno, glob, os, re, stat, sys, termios, warnings
+import errno, glob, io, os, re, stat, sys, termios, warnings
 from PIL import Image
 from .filter import frames_for_image
 from . import protocol as p
@@ -34,6 +35,60 @@ def _pty_allowed():
     return st.st_uid == 0 and not (st.st_mode & (stat.S_IWGRP | stat.S_IWOTH))
 
 
+MAX_INPUT_BYTES = 200 * 1024 * 1024
+MAX_PDF_PAGES = 50
+PDF_DPI = 300                      # matches the printer's 300 dpi; the page is then fitted to A4 like any image
+PDFTOPPM_TIMEOUT_S = 180
+PDFTOPPM_MEM_BYTES = 2 * 1024 ** 3
+
+
+def _orientation_degrees(options: str) -> int:
+    """Counter-clockwise rotation for CUPS orientation options: orientation-requested 3 portrait, 4 landscape, 5 reverse landscape,
+    6 reverse portrait; or the legacy `landscape` flag."""
+    opts = {}
+    for tok in options.split():
+        k, _, v = tok.partition("=")
+        opts[k] = v or "true"
+    o = opts.get("orientation-requested")
+    if o in ("4", "5", "6"):
+        return {"4": 90, "5": 270, "6": 180}[o]
+    if opts.get("landscape", "false").lower() in ("true", "yes", "on", "1"):
+        return 90
+    return 0
+
+
+def _pdf_pages(data: bytes):
+    """Rasterise a PDF to greyscale page images with pdftoppm (poppler) in a throwaway directory, with a time and memory limit.
+    Yields PIL images; raises RuntimeError on failure."""
+    import resource, shutil, subprocess, tempfile
+    exe = shutil.which("pdftoppm")
+    if not exe:
+        raise RuntimeError("pdftoppm (poppler-utils) is not installed")
+    with tempfile.TemporaryDirectory(prefix="oi-pdf-") as d:
+        src = os.path.join(d, "in.pdf")
+        with open(src, "wb") as fh:
+            fh.write(data)
+
+        def limits():
+            resource.setrlimit(resource.RLIMIT_AS, (PDFTOPPM_MEM_BYTES, PDFTOPPM_MEM_BYTES))
+        try:
+            r = subprocess.run([exe, "-r", str(PDF_DPI), "-gray", "-png", "-f", "1", "-l", str(MAX_PDF_PAGES), src, os.path.join(d, "pg")],
+                               capture_output=True, timeout=PDFTOPPM_TIMEOUT_S, preexec_fn=limits, env={"PATH": "/usr/bin:/bin"})
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("pdftoppm timed out after %d s" % PDFTOPPM_TIMEOUT_S)
+        if r.returncode:
+            raise RuntimeError("pdftoppm failed: %s" % r.stderr.decode("latin1", "replace")[:200])
+        pages = sorted(f for f in os.listdir(d) if f.startswith("pg") and f.endswith(".png"))
+        if not pages:
+            raise RuntimeError("PDF has no pages")
+        for name in pages:
+            img = Image.open(os.path.join(d, name))
+            if img.width * img.height > MAX_IMAGE_PIXELS:
+                raise RuntimeError("PDF page too large")
+            img.load()
+            yield img
+
+
 def filter_main(argv=None, stdin=None, stdout=None):
     argv = sys.argv if argv is None else argv
     if len(argv) not in (6, 7):
@@ -43,19 +98,34 @@ def filter_main(argv=None, stdin=None, stdout=None):
         copies = max(1, min(MAX_COPIES, int(argv[4])))
     except ValueError:
         copies = 1
-    src = argv[6] if len(argv) == 7 else (stdin or sys.stdin.buffer)
+    rotate = _orientation_degrees(argv[5])
     out = stdout or sys.stdout.buffer
     try:
-        img = Image.open(src)                                   # lazy: reads the header only
-        if img.width * img.height > MAX_IMAGE_PIXELS:           # explicit, not just PIL's warn-then-error behaviour
-            raise Image.DecompressionBombError("%dx%d pixels" % (img.width, img.height))
-        img.load()
-        frames = list(frames_for_image(img))
+        if len(argv) == 7:
+            with open(argv[6], "rb") as fh:
+                data = fh.read(MAX_INPUT_BYTES + 1)
+        else:
+            data = (stdin or sys.stdin.buffer).read(MAX_INPUT_BYTES + 1)
+        if len(data) > MAX_INPUT_BYTES:
+            raise RuntimeError("input larger than %d MB" % (MAX_INPUT_BYTES >> 20))
+        frames = []
+        if data[:5] == b"%PDF-":
+            images = _pdf_pages(data)
+        else:
+            img = Image.open(io.BytesIO(data))                      # lazy: reads the header only
+            if img.width * img.height > MAX_IMAGE_PIXELS:           # explicit, not just PIL's warn-then-error behaviour
+                raise Image.DecompressionBombError("%dx%d pixels" % (img.width, img.height))
+            img.load()
+            images = [img]
+        for img in images:
+            if rotate:
+                img = img.rotate(rotate, expand=True)
+            frames.extend(frames_for_image(img))
     except (Image.DecompressionBombError, Image.DecompressionBombWarning, MemoryError) as e:
         sys.stderr.write("ERROR: image too large to process (limit %d pixels): %s\n" % (MAX_IMAGE_PIXELS, e))
         return 1
     except Exception as e:
-        sys.stderr.write("ERROR: cannot read page image: %s\n" % e)
+        sys.stderr.write("ERROR: cannot read the job: %s\n" % e)
         return 1
     try:
         for _ in range(copies):
@@ -83,7 +153,7 @@ def _frames_from(data: bytes):
     """Split and validate a job stream. Raises ValueError with a reason for anything a well-behaved filter would not produce."""
     frames, off = [], 0
     while off < len(data):
-        ftype, payload, n = p.decode(data[off:])               # ValueError on a corrupt/truncated stream
+        ftype, payload, n = p.decode(data, off)                # ValueError on a corrupt/truncated stream (no slicing: linear time)
         reason = p.validate_frame(ftype, payload)
         if reason:
             raise ValueError(reason)

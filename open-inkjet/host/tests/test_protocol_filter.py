@@ -232,3 +232,15 @@ def test_fdlink_eof_and_write_timeout_and_resync_cost():
         got = l3.read_frame()
     th.join(); os.close(r3)
     assert got == (p.T_ACK, b"\x01\x02") and time.time() - t0 < 3
+
+
+def test_fast_crc_is_identical_to_the_bitwise_reference():
+    import os
+    assert p.crc16(b"123456789") == p.crc16_bitwise(b"123456789") == 0x29B1          # CRC-16/CCITT-FALSE check value
+    for n in (0, 1, 2, 7, 255, 1024, 5000):
+        d = os.urandom(n)
+        assert p.crc16(d) == p.crc16_bitwise(d)
+        assert p.crc16(d, 0x1234) == p.crc16_bitwise(d, 0x1234)                       # continuation with a non-default init
+    # incremental use (the C parser feeds one byte at a time): chaining equals one shot
+    d = os.urandom(300)
+    assert p.crc16(d[150:], p.crc16(d[:150])) == p.crc16(d)

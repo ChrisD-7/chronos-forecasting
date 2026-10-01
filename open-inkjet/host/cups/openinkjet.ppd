@@ -15,7 +15,8 @@
 *DefaultColorSpace: Gray
 *cupsVersion: 2.4
 *cupsModelNumber: 1
-*% Direct PNG/PBM submission only: no PDF or cups-raster route yet, and job options (copies, orientation, resolution) are ignored.
+*% PDF (and anything CUPS converts to PDF, e.g. text), PNG and PBM. Copies and orientation are honoured; media size, scaling and resolution are ignored.
+*cupsFilter: "application/pdf 0 oi_filter"
 *cupsFilter: "image/png 0 oi_filter"
 *cupsFilter: "image/x-portable-bitmap 0 oi_filter"
 *OpenUI *Resolution/Resolution: PickOne

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Host<->MCU framing. Frame: 0xA5 | type u8 | len u16 LE | payload | crc16 u16 LE.
 CRC16-CCITT-FALSE (poly 0x1021, init 0xFFFF) over type|len|payload. Spec mirrored in firmware/core/oi_proto.c."""
+import binascii
 import struct
 
 SOF = 0xA5
@@ -16,6 +17,13 @@ MAX_PAYLOAD = 1024
 
 
 def crc16(data: bytes, crc: int = 0xFFFF) -> int:
+    """CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection). binascii.crc_hqx is the C implementation of the same function
+    (verified against the check value 0x29B1 and the bitwise reference in tests); the bitwise loop cost about 6 s per page of frame data."""
+    return binascii.crc_hqx(data, crc)
+
+
+def crc16_bitwise(data: bytes, crc: int = 0xFFFF) -> int:
+    """Reference implementation, kept for the equivalence test."""
     for b in data:
         crc ^= b << 8
         for _ in range(8):
@@ -38,24 +46,27 @@ class NeedMore(ValueError):
     """Buffer holds a valid prefix; read more bytes and retry."""
 
 
-def decode(buf: bytes):
-    """Return (ftype, payload, bytes_consumed). Raises NeedMore for a truncated frame, ValueError for corrupt."""
-    if not buf:
+def decode(buf, off: int = 0):
+    """Return (ftype, payload, bytes_consumed) for the frame starting at buf[off:]. Raises NeedMore for a truncated frame, ValueError for a
+    corrupt one. Takes an offset instead of requiring a slice so scanning a long stream is linear (slicing copied the rest of the stream
+    for every frame: quadratic, and a 50-page job is over 100 MB)."""
+    avail = len(buf) - off
+    if avail <= 0:
         raise NeedMore("empty")
-    if buf[0] != SOF:
+    if buf[off] != SOF:
         raise ValueError("bad sof")
-    if len(buf) < 4:
+    if avail < 4:
         raise NeedMore("short header")
-    ftype, n = struct.unpack_from("<BH", buf, 1)
+    ftype, n = struct.unpack_from("<BH", buf, off + 1)
     if n > MAX_PAYLOAD:
         raise ValueError("bad length")
-    if len(buf) < 6 + n:
+    if avail < 6 + n:
         raise NeedMore("short payload")
-    body = buf[1:4 + n]
-    (crc,) = struct.unpack_from("<H", buf, 4 + n)
+    body = bytes(buf[off + 1:off + 4 + n])
+    (crc,) = struct.unpack_from("<H", buf, off + 4 + n)
     if crc != crc16(body):
         raise ValueError("crc")
-    return ftype, buf[4:4 + n], 6 + n
+    return ftype, bytes(buf[off + 4:off + 4 + n]), 6 + n
 
 
 # Column order contract: columns are ALWAYS sent in left-to-right (increasing carriage position) order.

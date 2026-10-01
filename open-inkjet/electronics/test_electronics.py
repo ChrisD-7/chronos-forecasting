@@ -143,3 +143,42 @@ def test_board_config_constants_match_design():
     assert re.search(r"#define\s+OI_N_PRIM\s+%d\b" % d.N_PRIM, text)
     assert re.search(r"#define\s+OI_SPI_HZ\s+%du\b" % d.SPI_REQUEST_HZ, text)
     assert re.search(r"#define\s+OI_SETTLE_NS\s+%du\b" % round(d.SETTLE_S * 1e9), text)
+
+
+# ---- circuit simulation (ngspice) of the head power stage, ASSUMED head parameters ----
+import shutil
+import spice_sim as sim
+
+needs_ngspice = pytest.mark.skipif(shutil.which("ngspice") is None, reason="needs ngspice")
+
+
+@needs_ngspice
+def test_spice_confirms_the_per_pulse_capacitor_formula():
+    r = sim.run(d.bulk_capacitance_f(), **sim.ISOLATED)                       # only the capacitor supplies one worst-case pulse
+    assert r["droop_fraction"] == pytest.approx(d.DROOP_MAX, abs=0.01)        # the formula says 5%; the simulator agrees (heater current falls a little)
+    assert r["supply_peak_a"] < 0.01                                          # (supply really was isolated)
+
+
+@needs_ngspice
+def test_spice_shows_the_per_column_bound_and_that_the_per_pulse_minimum_is_not_enough():
+    col = sim.run(d.column_capacitance_f(), n_pulses=d.N_ADDR, **sim.ISOLATED)
+    assert col["droop_fraction"] == pytest.approx(d.DROOP_MAX, abs=0.01)      # 400 uF holds a fully inked column to about 5% with no recharge
+    small = sim.run(d.bulk_capacitance_f(), n_pulses=d.N_ADDR, **sim.ISOLATED)
+    assert small["droop_fraction"] > 0.5                                      # 18.7 uF with no recharge: the rail collapses over a column
+
+
+@needs_ngspice
+def test_spice_confirms_the_esr_budget():
+    over = sim.run(2200e-6, esr=0.15, **sim.ISOLATED)                         # 150 mohm: above the 107 mohm budget
+    under = sim.run(2200e-6, esr=0.05, **sim.ISOLATED)
+    assert over["droop_fraction"] > d.DROOP_MAX > under["droop_fraction"]
+    assert under["droop_fraction"] == pytest.approx(5.6 * 0.05 / d.V_HEAD, abs=0.01)    # I x ESR / V
+
+
+@needs_ngspice
+def test_spice_with_a_stiff_supply_a_modest_capacitor_holds_the_rail():
+    """ASSUMED supply: 50 mohm + 100 nH + 20 mohm ESR. This is a statement about that assumption, not about a real PSU."""
+    for c in (470e-6, 1000e-6):
+        r = sim.run(c, n_pulses=d.N_ADDR, **sim.REALISTIC)
+        assert r["droop_fraction"] < d.DROOP_MAX
+    assert sim.run(d.bulk_capacitance_f(), n_pulses=d.N_ADDR, **sim.REALISTIC)["supply_peak_a"] > 1.0   # the supply, not the cap, then carries the load
