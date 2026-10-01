@@ -25,5 +25,5 @@ Repository root (chronos-forecasting) is Apache-2.0 and unrelated; this folder i
 ## Run everything
     pip install numpy pillow pytest cadquery      # gcc required for the firmware and end-to-end tests
     ./run_tests.sh                                # host + firmware (ASan/UBSan) + fuzz + simulator + CAD
-    ./run_tests.sh --mutate                       # additionally: 49 firmware mutants must all be killed
+    ./run_tests.sh --mutate                       # additionally: 53 firmware mutants must all be killed
     export PICO_SDK_PATH=/path/to/pico-sdk        # 2.x with submodules; also builds the RP2040 firmware (needs gcc-arm-none-eabi, cmake, ninja)

@@ -24,7 +24,7 @@
   serial link (EOF, write timeout, resync speed), filter (aspect, margins, alpha, 16-bit, non-square dpi), CUPS filter/backend logic and exit codes,
   PPD structure and mime types, and end-to-end tests.
 - **Firmware, C99 with -Wall -Wextra -Werror and ASan+UBSan:** scheduler, parser, job controller, matrix head, motion, feed, maintenance FSM (unit tests);
-  a coherent-sequence fuzzer (300k iterations, thousands of complete passes); 49 single-line mutants of the firmware (including the application core), all killed and none invalid (`tools_mutate.py`).
+  a coherent-sequence fuzzer (300k iterations, thousands of complete passes); 53 single-line mutants of the firmware (including the application core), all killed and none invalid (`tools_mutate.py`).
 - **Full-pipeline simulator (`firmware/tests/sim.c`):** host filter -> frames -> the REAL C parser/job/scheduler/matrix driver -> simulated
   carriage, paper feed (fractional steps) and head -> printed page bitmap equals the input bitmap exactly, over a clean link, over a link
   with injected CRC errors and truncated frames, and through a pty via the real backend code.
