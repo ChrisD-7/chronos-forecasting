@@ -149,6 +149,16 @@ def motor_mount():
     return p
 
 
+def bearing_retainer():
+    """Ring between the side plate's outer face and the motor mount: holds the 608 bearing in its seat. Same M3 square as the motor mount."""
+    r = cq.Workplane("XY").box(RETAINER_OD, RETAINER_OD, RETAINER_T)
+    r = r.cut(_cyl(0, 0, RETAINER_BORE, -RETAINER_T, RETAINER_T))
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            r = r.cut(_cyl(sx * MOTOR_BOLT_SQUARE, sy * MOTOR_BOLT_SQUARE, 3.4, -RETAINER_T, RETAINER_T))
+    return r
+
+
 def encoder_bracket():
     """Reader holes (M3, pitch GUESS) plus an M5 hole to the extrusion T-slot. The encoder strip slot is not designed."""
     p = cq.Workplane("XY").box(25.0, 28.0, 3.0)
@@ -160,4 +170,4 @@ def encoder_bracket():
 PARTS = dict(side_plate=side_plate, cartridge_holder=cartridge_holder, roller_block=roller_block,
              cap_base=cap_base, carriage_bracket=carriage_bracket, platen_half=platen_half, platen_half_right=lambda: platen_half(+1),
              platen_post_outer=platen_post, platen_post_joint=lambda: platen_post(joint=True), sensor_mount=sensor_mount,
-             motor_mount=motor_mount, encoder_bracket=encoder_bracket)
+             motor_mount=motor_mount, encoder_bracket=encoder_bracket, bearing_retainer=bearing_retainer)

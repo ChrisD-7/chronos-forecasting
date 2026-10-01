@@ -66,3 +66,9 @@ POST_W = 20.0
 # motor mount to side plate: M3 square around the roller axis (GUESS; both parts use it)
 MOTOR_BOLT_SQUARE = 21.0
 M5_HOLE_D = 5.5
+
+# bearing retainer: a thin ring between the side plate and the motor mount; its bore overlaps the 608 OUTER race only (inner ring OD about 12 mm)
+RETAINER_T = 2.0
+RETAINER_OD = 50.0
+RETAINER_BORE = 16.0       # < 22 (bearing OD) so it retains; > 12 + clearance so it never touches the rotating inner ring (608 inner ring OD ~ 12, GUESS)
+BEARING_INNER_RING_OD = 12.0

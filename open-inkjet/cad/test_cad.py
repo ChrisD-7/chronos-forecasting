@@ -220,7 +220,7 @@ import assembly_model as am
 @pytest.mark.parametrize("cx", [-139.0, -130.0, 0.0, 130.0, 139.0])
 def test_assembly_has_no_interference_at_carriage_positions(cx):
     shapes = am.build(cx)
-    assert len(shapes) == 17 and all(s.isValid() for s in shapes.values())
+    assert len(shapes) == 18 and all(s.isValid() for s in shapes.values())
     assert am.interferences(shapes) == []
 
 
@@ -262,8 +262,10 @@ def test_assembly_minimum_clearances(cx):
     assert d(s["cartridge"], s["platen_left"]) >= NOZZLE_GAP - 1e-6 or d(s["cartridge"], s["platen_right"]) >= NOZZLE_GAP - 1e-6
     for plate in ("plate_left", "plate_right"):
         assert d(s["bracket"], s[plate]) >= 3.0
-    # OPEN DESIGN ITEM (found by review): the 23 mm pilot bore leaves a radial gap of (23 - 22) / 2 around the 22 mm bearing, so the mount does NOT retain it.
-    assert d(s["motor_mount"], s["bearing_r"]) == pytest.approx((NEMA17["pilot"] + PILOT_CLEAR - BEARING_608["od"]) / 2, abs=1e-6)
+    # the retainer replaces the earlier open item (the 23 mm motor-mount bore left the bearing unretained): it touches the bearing's outer race
+    assert d(s["retainer"], s["bearing_r"]) == pytest.approx(0.0, abs=1e-6)
+    assert d(s["retainer"], s["shaft"]) >= (RETAINER_BORE - SHAFT_D) / 2 - 1e-6                     # never touches the shaft
+    assert d(s["motor_mount"], s["plate_right"]) == pytest.approx(RETAINER_T, abs=1e-6)             # motor mount stands off by the retainer thickness
 
 
 def test_riser_clearance_is_what_the_layout_claims():
@@ -271,3 +273,16 @@ def test_riser_clearance_is_what_the_layout_claims():
     s = am.build(0.0)
     measured = am.min_distance(s["bracket"], s["ext_rear"])
     assert measured >= c["riser_clears_extrusion_mm"] - 1e-6 and c["riser_clears_extrusion_mm"] >= 3.0
+
+
+def test_bearing_retainer_geometry():
+    holes = {(round(h[0], 3), round(h[1], 3), round(h[2], 3)) for h in cyl_holes(PARTS["bearing_retainer"]())}
+    assert (0.0, 0.0, RETAINER_BORE / 2) in holes                                                  # central bore
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            assert (sx * MOTOR_BOLT_SQUARE, sy * MOTOR_BOLT_SQUARE, 1.7) in holes                  # same square as the side plate and motor mount
+    assert BEARING_608["id"] < RETAINER_BORE < BEARING_608["od"]                                   # retains the outer race, clears the shaft
+    assert RETAINER_BORE > BEARING_INNER_RING_OD + 2.0                                             # and never rubs the rotating inner ring
+    # bolt holes keep a wall to the bore and to the part edge (generic edge test also covers the edge)
+    import math
+    assert math.hypot(MOTOR_BOLT_SQUARE, MOTOR_BOLT_SQUARE) - 1.7 - RETAINER_BORE / 2 >= 1.2

@@ -63,7 +63,10 @@ def build(carriage_x=0.0):
         (carriage_x, holder_cy, st["nozzle_z"] + HP45_BOX["h"] / 2)).val()
     # motor mount on the right plate's outer face, centred on the roller axis (same 120 degree frame as the side plate)
     mm = parts.motor_mount().val().rotate((0, 0, 0), (1, 1, 1), 120)
-    shapes["motor_mount"] = mm.translate(cq.Vector(PLATE_INNER_SPACING / 2 + SIDE_PLATE["t"] + MOTOR_PLATE_T / 2, 0, -20.0))
+    face = PLATE_INNER_SPACING / 2 + SIDE_PLATE["t"]
+    rt = parts.bearing_retainer().val().rotate((0, 0, 0), (1, 1, 1), 120)
+    shapes["retainer"] = rt.translate(cq.Vector(face + RETAINER_T / 2, 0, -20.0))                   # on the plate face, over the bearing
+    shapes["motor_mount"] = mm.translate(cq.Vector(face + RETAINER_T + MOTOR_PLATE_T / 2, 0, -20.0))  # motor mount sits on the retainer
     return shapes
 
 

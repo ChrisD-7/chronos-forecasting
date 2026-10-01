@@ -24,6 +24,7 @@
 | Hobby servos (cap, wiper) | 2 | actuation angles GUESS in board_config.h |
 | Platen halves (175 mm), platen posts (1 joint + 2 outer), sensor mount, motor mount(s), encoder bracket, carriage bracket (printed) | 2 / 3 / 1 / 2 / 1 / 1 | cad/parts.py; NEMA17 flange dims sourced, others GUESS; M5 slot bolts on the posts, sensor and encoder brackets |
 | M5 bolts + T-nuts for posts and brackets | 6 | 3 posts + sensor + encoder + spare |
+| Bearing retainer ring (printed, 2 mm) | 1 | cad/parts.py bearing_retainer; sits between the right side plate and the motor mount |
 | Motor-to-roller flexible shaft coupler (5 mm to 8 mm) | 1 | purchased part; standoff/length between motor mount and roller not designed |
 | Pull-up (OE_N) and pull-down (36 driver inputs) resistors | 37 | netlist.py; values not chosen |
 | Pi Zero 2 W (CUPS host) | 1 | |
